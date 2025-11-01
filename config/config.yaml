@@ -1,0 +1,96 @@
+trading:
+  testnet: true              # Use testnet (true) or production (false)
+  trading_type: "spot"       # "spot" or "futures"
+  use_maker_orders: false   # true for limit orders, false for market orders
+  initial_capital: 10000.0   # Starting capital in USDT
+  paper_trading: true        # Paper trading mode
+  symbols:                   # Trading pairs (best for scalping)
+    - BTCUSDT                # Priority 1 - Highest liquidity, lowest costs
+    - ETHUSDT                # Priority 2 - Very high liquidity
+    - BNBUSDT                # Priority 3 - Good spreads
+    - SOLUSDT                # Priority 4 - Volatile, good opportunities
+    - XRPUSDT                # Priority 5 - Stable, predictable
+  scan_interval: 30         # Seconds between market scans
+  kline_interval: "5m"      # Candlestick interval
+  kline_limit: 200          # Number of candles to fetch
+  
+  # Real-time monitoring for immediate profit taking
+  real_time_monitoring: true
+  price_check_interval: 1.0  # Check every 1 second for targets
+  take_profit_immediately: true  # NO delays - close instantly when target reached
+  stop_loss_immediately: true
+  
+  # Minimum profit targets (after all fees)
+  min_take_profit_pct: 0.40   # Spot: 0.40% minimum (covers 0.20% fees + 0.20% profit)
+  min_take_profit_futures_pct: 0.25  # Futures: 0.25% minimum
+  
+  # Auto Compounding
+  auto_compounding: true
+  compounding_threshold: 50.0  # Compound when profit >= $50
+  compounding_interval: "daily"  # "immediate", "daily", or "weekly"
+
+risk:
+  max_position_size_pct: 2.0      # Max 2% per position
+  max_total_positions: 5          # Max concurrent positions
+  max_daily_trades: 1000           # High limit for scalping (immediate profit taking)
+  max_daily_loss_pct: 2.0         # Stop if lose 2% in day
+  max_drawdown_pct: 5.0           # Emergency stop at 5% drawdown
+  stop_loss_pct: 0.50             # Default stop loss % (conservative for scalping)
+  take_profit_pct: 0.50           # Default take profit % (will be auto-adjusted to min)
+  base_position_size_pct: 1.0     # Base position size
+  min_position_size_usd: 10.0     # Minimum position
+  max_position_size_usd: 200.0    # Maximum position
+
+strategies:
+  scalping:
+    enabled: true
+    confidence_threshold: 15.0
+    max_hold_time_minutes: 180
+    stop_loss_pct: 0.30        # Tight stop loss
+    take_profit_pct: 0.50      # Will be adjusted to min 0.40% by bot
+  
+  day_trading:
+    enabled: true
+    confidence_threshold: 20.0
+    max_hold_time_minutes: 1440
+    stop_loss_pct: 0.80        # Medium stop loss
+    take_profit_pct: 0.50      # Will be adjusted to min 0.40% by bot
+  
+  momentum:
+    enabled: true
+    confidence_threshold: 18.0
+    max_hold_time_minutes: 480
+    stop_loss_pct: 1.0         # Wider stop loss
+    take_profit_pct: 0.60      # Higher target, will be adjusted if needed
+
+api:
+  max_retries: 3
+  retry_delay: 1.0
+  timeout: 10
+  cache_duration: 5
+
+# Fee settings (MUST match Binance exactly for live matching)
+fees:
+  spot_maker: 0.001   # 0.1%
+  spot_taker: 0.001   # 0.1%
+  futures_maker: 0.0002  # 0.02%
+  futures_taker: 0.0004  # 0.04%
+
+# Slippage settings (by coin liquidity)
+slippage:
+  BTCUSDT: 0.0002   # 0.02% - highest liquidity
+  ETHUSDT: 0.0002   # 0.02%
+  BNBUSDT: 0.0003   # 0.03%
+  SOLUSDT: 0.0004   # 0.04%
+  XRPUSDT: 0.0004   # 0.04%
+  default: 0.0005   # 0.05% for others
+
+logging:
+  level: "INFO"
+  file_rotation_mb: 10
+  backup_count: 3
+
+dashboard:
+  port: 10000
+  host: "0.0.0.0"
+
