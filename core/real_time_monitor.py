@@ -2,7 +2,7 @@
 Real-time price monitoring for immediate profit taking
 """
 import time
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 from queue import Queue
 from typing import Dict, Optional
 from datetime import datetime
@@ -30,6 +30,7 @@ class RealTimePriceMonitor:
         self.check_interval = check_interval
         self.running = False
         self.monitored_positions: Dict[str, Dict] = {}  # {symbol+strategy: {entry_price, target_price, quantity, ...}}
+        self.positions_lock = Lock()  # Thread safety for monitored_positions
         self.price_updates = Queue()
         self.stop_event = Event()
         self.monitor_thread = None
@@ -44,7 +45,7 @@ class RealTimePriceMonitor:
         stop_loss_pct: float,
         action: str  # 'BUY' or 'SELL'
     ):
-        """Add position to monitor"""
+        """Add position to monitor (thread-safe)"""
         try:
             key = f"{symbol}_{strategy}"
             
@@ -60,19 +61,20 @@ class RealTimePriceMonitor:
                 symbol, entry_price, quantity, action, min_profit_pct=0.05
             )
             
-            self.monitored_positions[key] = {
-                'symbol': symbol,
-                'strategy': strategy,
-                'entry_price': entry_price,
-                'quantity': quantity,
-                'target_price': target_price,
-                'stop_price': stop_price,
-                'breakeven_profit_price': breakeven_price,  # Price where fees covered + small profit
-                'target_profit_pct': target_profit_pct,
-                'stop_loss_pct': stop_loss_pct,
-                'action': action,
-                'added_time': time.time()
-            }
+            with self.positions_lock:
+                self.monitored_positions[key] = {
+                    'symbol': symbol,
+                    'strategy': strategy,
+                    'entry_price': entry_price,
+                    'quantity': quantity,
+                    'target_price': target_price,
+                    'stop_price': stop_price,
+                    'breakeven_profit_price': breakeven_price,  # Price where fees covered + small profit
+                    'target_profit_pct': target_profit_pct,
+                    'stop_loss_pct': stop_loss_pct,
+                    'action': action,
+                    'added_time': time.time()
+                }
             
             logger.debug(f"[MONITOR] Added {key} - Target: ${target_price:.2f}, Breakeven+Profit: ${breakeven_price:.2f}, Stop: ${stop_price:.2f}")
             
@@ -135,12 +137,13 @@ class RealTimePriceMonitor:
                 return entry_price * 0.997  # 0.3% below entry
     
     def remove_position(self, symbol: str, strategy: str):
-        """Remove position from monitoring"""
+        """Remove position from monitoring (thread-safe)"""
         try:
             key = f"{symbol}_{strategy}"
-            if key in self.monitored_positions:
-                del self.monitored_positions[key]
-                logger.debug(f"[MONITOR] Removed {key}")
+            with self.positions_lock:
+                if key in self.monitored_positions:
+                    del self.monitored_positions[key]
+                    logger.debug(f"[MONITOR] Removed {key}")
         except Exception as e:
             logger.error(f"[ERROR] Error removing position: {e}")
     
@@ -161,7 +164,11 @@ class RealTimePriceMonitor:
         while self.running and not self.stop_event.is_set():
             try:
                 check_count += 1
-                monitored_count = len(self.monitored_positions)
+                
+                # Get snapshot of positions (thread-safe)
+                with self.positions_lock:
+                    monitored_count = len(self.monitored_positions)
+                    positions_snapshot = list(self.monitored_positions.items())
                 
                 # Log status every 60 checks (every ~60 seconds at 1s interval)
                 if check_count % 60 == 0:
@@ -171,8 +178,8 @@ class RealTimePriceMonitor:
                     time.sleep(self.check_interval)
                     continue
                 
-                # Check all monitored positions
-                for key, position_info in list(self.monitored_positions.items()):
+                # Check all monitored positions (using snapshot to avoid lock during price checks)
+                for key, position_info in positions_snapshot:
                     symbol = position_info['symbol']
                     strategy = position_info['strategy']
                     current_price = self.api_client.get_current_price(symbol)

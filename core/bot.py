@@ -3,6 +3,7 @@ Main trading bot orchestrator - Live Matching Version
 """
 import time
 from threading import Lock, Thread
+from queue import Empty
 from datetime import datetime
 from typing import Dict, Any, Optional
 from core.api_client import BinanceAPIClient
@@ -132,8 +133,10 @@ class TradingBot:
             try:
                 # Only process if bot is running AND monitor is running
                 if self.running and self.price_monitor.running:
-                    if not self.price_monitor.price_updates.empty():
-                        update = self.price_monitor.price_updates.get()
+                    # Use get_nowait() to avoid race condition with empty() check
+                    # get_nowait() raises Empty exception if queue is empty
+                    try:
+                        update = self.price_monitor.price_updates.get_nowait()
                         
                         symbol = update['symbol']
                         strategy = update['strategy']
@@ -153,8 +156,8 @@ class TradingBot:
                         elif signal == 'STOP_LOSS':
                             logger.warning(f"[STOP LOSS] {symbol} ({strategy}) hit stop loss! Closing at ${current_price:.2f}...")
                             self._close_position_immediately(symbol, strategy, current_price, reason='STOP_LOSS')
-                    else:
-                        # No updates, wait a bit
+                    except Empty:
+                        # Queue is empty, wait a bit
                         time.sleep(0.1)
                 else:
                     # Bot or monitor not running, wait longer
