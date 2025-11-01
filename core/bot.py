@@ -126,41 +126,93 @@ class TradingBot:
     
     def _handle_price_updates(self):
         """Process price monitor signals for immediate profit taking"""
-        while self.running:
+        # Handler runs continuously to process monitor signals
+        # It checks both bot running state and monitor running state
+        while True:
             try:
-                if not self.price_monitor.price_updates.empty():
-                    update = self.price_monitor.price_updates.get()
-                    
-                    symbol = update['symbol']
-                    strategy = update['strategy']
-                    signal = update['signal']
-                    current_price = update['current_price']
-                    
-                    if signal == 'TAKE_PROFIT':
-                        # IMMEDIATE PROFIT TAKING
-                        logger.info(f"[PROFIT TARGET] {symbol} ({strategy}) reached target! Taking profit NOW at ${current_price:.2f}...")
-                        self._close_position_immediately(symbol, strategy, current_price, reason='TAKE_PROFIT')
-                    
-                    elif signal == 'BREAKEVEN_PROFIT':
-                        # FEES COVERED + SMALL PROFIT - CLOSE IMMEDIATELY!
-                        logger.info(f"[FEES COVERED] {symbol} ({strategy}) fees covered + small profit! Closing NOW at ${current_price:.2f}...")
-                        self._close_position_immediately(symbol, strategy, current_price, reason='FEES_COVERED_PROFIT')
-                    
-                    elif signal == 'STOP_LOSS':
-                        logger.warning(f"[STOP LOSS] {symbol} ({strategy}) hit stop loss! Closing at ${current_price:.2f}...")
-                        self._close_position_immediately(symbol, strategy, current_price, reason='STOP_LOSS')
+                # Only process if bot is running AND monitor is running
+                if self.running and self.price_monitor.running:
+                    if not self.price_monitor.price_updates.empty():
+                        update = self.price_monitor.price_updates.get()
+                        
+                        symbol = update['symbol']
+                        strategy = update['strategy']
+                        signal = update['signal']
+                        current_price = update['current_price']
+                        
+                        if signal == 'TAKE_PROFIT':
+                            # IMMEDIATE PROFIT TAKING
+                            logger.info(f"[PROFIT TARGET] {symbol} ({strategy}) reached target! Taking profit NOW at ${current_price:.2f}...")
+                            self._close_position_immediately(symbol, strategy, current_price, reason='TAKE_PROFIT')
+                        
+                        elif signal == 'BREAKEVEN_PROFIT':
+                            # FEES COVERED + SMALL PROFIT - CLOSE IMMEDIATELY!
+                            logger.info(f"[FEES COVERED] {symbol} ({strategy}) fees covered + small profit! Closing NOW at ${current_price:.2f}...")
+                            self._close_position_immediately(symbol, strategy, current_price, reason='FEES_COVERED_PROFIT')
+                        
+                        elif signal == 'STOP_LOSS':
+                            logger.warning(f"[STOP LOSS] {symbol} ({strategy}) hit stop loss! Closing at ${current_price:.2f}...")
+                            self._close_position_immediately(symbol, strategy, current_price, reason='STOP_LOSS')
+                    else:
+                        # No updates, wait a bit
+                        time.sleep(0.1)
+                else:
+                    # Bot or monitor not running, wait longer
+                    time.sleep(1.0)
                 
-                time.sleep(0.1)  # Check queue frequently
-                
+            except KeyboardInterrupt:
+                break
             except Exception as e:
                 logger.error(f"[ERROR] Error handling price updates: {e}")
                 time.sleep(1.0)
+    
+    def _reload_positions_to_monitor(self):
+        """Reload existing open positions into price monitor (for bot restarts)"""
+        try:
+            open_positions = self.position_manager.get_all_positions()
+            if not open_positions:
+                return
+            
+            logger.info(f"[MONITOR] Reloading {len(open_positions)} open positions into price monitor...")
+            
+            for position in open_positions:
+                if position.status != 'OPEN':
+                    continue
+                
+                # Calculate profit/loss percentages from stop_loss and take_profit prices
+                if position.action == 'BUY':
+                    stop_loss_pct = ((position.entry_price - position.stop_loss) / position.entry_price) * 100.0
+                    take_profit_pct = ((position.take_profit - position.entry_price) / position.entry_price) * 100.0
+                else:  # SELL (short)
+                    stop_loss_pct = ((position.stop_loss - position.entry_price) / position.entry_price) * 100.0
+                    take_profit_pct = ((position.entry_price - position.take_profit) / position.entry_price) * 100.0
+                
+                # Add to monitor
+                self.price_monitor.add_position(
+                    symbol=position.symbol,
+                    strategy=position.strategy,
+                    entry_price=position.entry_price,
+                    quantity=position.quantity,
+                    target_profit_pct=take_profit_pct,
+                    stop_loss_pct=stop_loss_pct,
+                    action=position.action
+                )
+                
+                logger.info(f"[MONITOR] Reloaded {position.symbol} ({position.strategy}) into monitor")
+            
+            logger.info(f"[OK] Successfully reloaded {len(open_positions)} positions into price monitor")
+            
+        except Exception as e:
+            logger.error(f"[ERROR] Error reloading positions to monitor: {e}", exc_info=True)
     
     def start(self):
         """Start trading bot"""
         try:
             self.running = True
             logger.info("[START] Starting trading bot...")
+            
+            # Reload existing open positions into price monitor
+            self._reload_positions_to_monitor()
             
             while self.running:
                 try:

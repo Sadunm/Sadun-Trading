@@ -157,14 +157,29 @@ class RealTimePriceMonitor:
     
     def _monitor_loop(self):
         """Continuous monitoring loop"""
+        check_count = 0
         while self.running and not self.stop_event.is_set():
             try:
+                check_count += 1
+                monitored_count = len(self.monitored_positions)
+                
+                # Log status every 60 checks (every ~60 seconds at 1s interval)
+                if check_count % 60 == 0:
+                    logger.debug(f"[MONITOR] Monitoring {monitored_count} positions (check #{check_count})")
+                
+                if monitored_count == 0:
+                    time.sleep(self.check_interval)
+                    continue
+                
                 # Check all monitored positions
                 for key, position_info in list(self.monitored_positions.items()):
                     symbol = position_info['symbol']
+                    strategy = position_info['strategy']
                     current_price = self.api_client.get_current_price(symbol)
                     
                     if not current_price:
+                        if check_count % 60 == 0:  # Log occasionally to avoid spam
+                            logger.warning(f"[MONITOR] Could not get price for {symbol}")
                         continue
                     
                     # Check if target, breakeven+profit, or stop reached
@@ -173,6 +188,7 @@ class RealTimePriceMonitor:
                     stop_hit = False
                     
                     breakeven_price = position_info.get('breakeven_profit_price', None)
+                    entry_price = position_info['entry_price']
                     
                     if position_info['action'] == 'BUY':
                         if current_price >= position_info['target_price']:
@@ -189,9 +205,21 @@ class RealTimePriceMonitor:
                         elif current_price >= position_info['stop_price']:
                             stop_hit = True
                     
+                    # Log detailed status every 60 checks for debugging
+                    if check_count % 60 == 0:
+                        pct_change = ((current_price - entry_price) / entry_price * 100.0) if entry_price > 0 else 0.0
+                        logger.debug(
+                            f"[MONITOR] {symbol} ({strategy}): "
+                            f"Price=${current_price:.2f} (Entry=${entry_price:.2f}, {pct_change:+.2f}%), "
+                            f"Target=${position_info['target_price']:.2f}, "
+                            f"Breakeven+Profit=${breakeven_price:.2f if breakeven_price else 'N/A'}, "
+                            f"Stop=${position_info['stop_price']:.2f}"
+                        )
+                    
                     # Priority: Target > Breakeven+Profit > Stop Loss
                     # Send signal if any condition reached
                     if target_reached:
+                        logger.info(f"[MONITOR] {symbol} ({strategy}) TARGET REACHED! Price: ${current_price:.2f}")
                         self.price_updates.put({
                             'key': key,
                             'symbol': symbol,
@@ -202,6 +230,7 @@ class RealTimePriceMonitor:
                         })
                     elif breakeven_profit_reached:
                         # Fees covered + small profit achieved - close immediately!
+                        logger.info(f"[MONITOR] {symbol} ({strategy}) BREAKEVEN+PROFIT REACHED! Price: ${current_price:.2f} (Breakeven: ${breakeven_price:.2f})")
                         self.price_updates.put({
                             'key': key,
                             'symbol': symbol,
@@ -211,6 +240,7 @@ class RealTimePriceMonitor:
                             'position_info': position_info
                         })
                     elif stop_hit:
+                        logger.warning(f"[MONITOR] {symbol} ({strategy}) STOP LOSS HIT! Price: ${current_price:.2f}")
                         self.price_updates.put({
                             'key': key,
                             'symbol': symbol,
@@ -224,7 +254,7 @@ class RealTimePriceMonitor:
                 time.sleep(self.check_interval)
                 
             except Exception as e:
-                logger.error(f"[ERROR] Error in price monitoring: {e}")
+                logger.error(f"[ERROR] Error in price monitoring: {e}", exc_info=True)
                 time.sleep(self.check_interval)
     
     def stop_monitoring(self):
