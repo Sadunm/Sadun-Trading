@@ -77,6 +77,9 @@ class TradingBot:
         # Real-time price monitor for immediate profit taking
         self.price_monitor = RealTimePriceMonitor(
             api_client=self.api_client,
+            fee_calculator=self.fee_calculator,
+            slippage_simulator=self.slippage_simulator,
+            spread_simulator=self.spread_simulator,
             check_interval=trading_config.get('price_check_interval', 1.0)
         )
         self.price_monitor.start_monitoring()
@@ -137,6 +140,11 @@ class TradingBot:
                         # IMMEDIATE PROFIT TAKING
                         logger.info(f"[PROFIT TARGET] {symbol} ({strategy}) reached target! Taking profit NOW at ${current_price:.2f}...")
                         self._close_position_immediately(symbol, strategy, current_price, reason='TAKE_PROFIT')
+                    
+                    elif signal == 'BREAKEVEN_PROFIT':
+                        # FEES COVERED + SMALL PROFIT - CLOSE IMMEDIATELY!
+                        logger.info(f"[FEES COVERED] {symbol} ({strategy}) fees covered + small profit! Closing NOW at ${current_price:.2f}...")
+                        self._close_position_immediately(symbol, strategy, current_price, reason='FEES_COVERED_PROFIT')
                     
                     elif signal == 'STOP_LOSS':
                         logger.warning(f"[STOP LOSS] {symbol} ({strategy}) hit stop loss! Closing at ${current_price:.2f}...")
@@ -333,6 +341,7 @@ class TradingBot:
                     symbol=symbol,
                     strategy=strategy_name,
                     entry_price=actual_entry_price,
+                    quantity=quantity,
                     target_profit_pct=take_profit_pct,
                     stop_loss_pct=stop_loss_pct,
                     action=signal['action']
