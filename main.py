@@ -18,7 +18,7 @@ try:
 except:
     pass
 
-# STEP 1: Load .env file FIRST (before logger)
+# STEP 1: Load .env file FIRST (before logger) - Optional for Render/Cloud
 try:
     from dotenv import load_dotenv
     env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -26,14 +26,14 @@ try:
         load_dotenv(env_path, override=True)
         print(f"[DEBUG] .env file loaded from {env_path}")
     else:
-        print(f"[ERROR] .env file not found at {env_path}")
-        sys.exit(1)
+        # .env file not found - try to load from environment variables (for Render/Cloud)
+        print(f"[INFO] .env file not found at {env_path}, using environment variables")
+        # Try loading from current directory (in case of different paths)
+        load_dotenv(override=False)  # Load from environment, don't override existing vars
 except ImportError:
-    print("[ERROR] python-dotenv not installed. Install with: pip install python-dotenv")
-    sys.exit(1)
+    print("[WARN] python-dotenv not installed. Using environment variables only.")
 except Exception as e:
-    print(f"[ERROR] Error loading .env: {e}")
-    sys.exit(1)
+    print(f"[WARN] Error loading .env: {e}. Continuing with environment variables...")
 
 # STEP 2: Setup logger AFTER .env is loaded
 from utils.logger import setup_logger
@@ -64,7 +64,10 @@ def main():
         # Validate API keys
         if not api_key or not secret_key:
             logger.error("[ERROR] BINANCE_API_KEY and BINANCE_SECRET_KEY not set!")
-            logger.info("Please set them in your .env file")
+            logger.info("Please set them in:")
+            logger.info("  - .env file (for local development)")
+            logger.info("  - Environment variables (for cloud deployment like Render)")
+            logger.info("  - Render Dashboard → Environment tab")
             sys.exit(1)
         
         logger.info(f"[OK] API keys loaded (lengths: {len(api_key)}, {len(secret_key)})")
