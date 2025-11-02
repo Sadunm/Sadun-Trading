@@ -44,7 +44,8 @@ class TradingBot:
         trading_config = self.config.get_trading_config()
         risk_config = self.config.get_risk_config()
         
-        # Trading type
+        # Trading mode
+        self.paper_trading = trading_config.get('paper_trading', True)  # Default: paper trading
         self.trading_type = trading_config.get('trading_type', 'spot')
         self.use_maker_orders = trading_config.get('use_maker_orders', False)
         
@@ -383,7 +384,7 @@ class TradingBot:
                 logger.warning(f"[WARN] Invalid stop loss/take profit for {symbol}: {error}")
                 return
             
-            # Open position (paper trading - track only, no API call)
+            # Open position
             if self.position_manager.open_position(
                 symbol=symbol,
                 strategy=strategy_name,
@@ -442,6 +443,26 @@ class TradingBot:
                 actual_exit_price = self.spread_simulator.get_bid_price(actual_exit_price, symbol)
             else:  # SELL position (buying to close)
                 actual_exit_price = self.spread_simulator.get_ask_price(actual_exit_price, symbol)
+            
+            # LIVE TRADING: Place actual SELL order on Binance
+            if not self.paper_trading:
+                exit_action = 'SELL' if position.action == 'BUY' else 'BUY'
+                order_result = self.api_client.place_order(
+                    symbol=symbol,
+                    side=exit_action,
+                    quantity=position.quantity,  # Close full remaining quantity
+                    order_type='MARKET'
+                )
+                
+                if not order_result:
+                    logger.error(f"[ERROR] Failed to place exit order for {symbol}")
+                    return
+                
+                # Get actual filled price
+                filled_price = float(order_result.get('price', actual_exit_price))
+                if filled_price != actual_exit_price:
+                    logger.info(f"[ORDER] Actual exit fill: ${filled_price:.2f} (estimated: ${actual_exit_price:.2f})")
+                    actual_exit_price = filled_price
             
             # Calculate profit with ALL costs
             profit_data = self.profit_calculator.calculate_net_profit(
@@ -547,12 +568,32 @@ class TradingBot:
                 volatility=volatility
             )
             
-            # Partial close
+            # LIVE TRADING: Place actual SELL order for partial quantity
+            if not self.paper_trading:
+                exit_action = 'SELL' if position.action == 'BUY' else 'BUY'
+                order_result = self.api_client.place_order(
+                    symbol=symbol,
+                    side=exit_action,
+                    quantity=close_quantity,  # Partial quantity (50% by default)
+                    order_type='MARKET'
+                )
+                
+                if not order_result:
+                    logger.error(f"[ERROR] Failed to place partial close order for {symbol}")
+                    return
+                
+                # Get actual filled price
+                filled_price = float(order_result.get('price', actual_exit_price))
+                if filled_price != actual_exit_price:
+                    logger.info(f"[ORDER] Actual partial fill: ${filled_price:.2f} (estimated: ${actual_exit_price:.2f})")
+                    actual_exit_price = filled_price
+            
+            # Partial close (update position tracking)
             result = self.position_manager.partial_close_position(
                 symbol=symbol,
                 strategy=strategy_name,
                 close_quantity=close_quantity,
-                exit_price=actual_exit_price,
+                exit_price=actual_exit_price,  # Use actual API fill price if live trading
                 exit_reason='PARTIAL_FEES_PROFIT',
                 fees=partial_profit_data['total_costs']
             )

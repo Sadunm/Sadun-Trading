@@ -207,6 +207,74 @@ class BinanceAPIClient:
             # Fallback: use 2 decimals
             return f"{price:.2f}"
     
+    def place_order(
+        self,
+        symbol: str,
+        side: str,  # 'BUY' or 'SELL'
+        quantity: float,
+        price: Optional[float] = None,
+        order_type: str = 'MARKET'  # 'MARKET' or 'LIMIT'
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Place an order on Binance (for LIVE TRADING)
+        
+        Args:
+            symbol: Trading pair (e.g., 'BTCUSDT')
+            side: 'BUY' or 'SELL'
+            quantity: Order quantity (for partial close, use specific quantity)
+            price: Limit price (required for LIMIT orders, optional for MARKET)
+            order_type: 'MARKET' or 'LIMIT'
+        
+        Returns:
+            Order response dict or None if failed
+        """
+        try:
+            from utils.validators import validate_price
+            
+            # Validate inputs
+            if not validate_price(quantity) or quantity <= 0:
+                logger.error(f"[ERROR] Invalid quantity: {quantity}")
+                return None
+            
+            if order_type == 'LIMIT' and (not price or not validate_price(price)):
+                logger.error(f"[ERROR] LIMIT order requires valid price: {price}")
+                return None
+            
+            # Prepare parameters
+            params = {
+                'symbol': symbol.upper(),
+                'side': side.upper(),
+                'type': order_type,
+                'quantity': self._format_quantity(symbol, quantity),
+            }
+            
+            # Add price for LIMIT orders
+            if order_type == 'LIMIT':
+                params['price'] = self._format_price(symbol, price)
+                params['timeInForce'] = 'GTC'  # Good Till Cancel
+            
+            # Make signed request
+            response = self._make_request(
+                method='POST',
+                endpoint='/api/v3/order',
+                params=params,
+                signed=True
+            )
+            
+            order_data = response.json()
+            
+            logger.info(f"[OK] Order placed: {side} {quantity} {symbol} @ {order_type}")
+            if order_type == 'MARKET':
+                logger.info(f"[ORDER] Market order executed - Fill details in response")
+            else:
+                logger.info(f"[ORDER] Limit order placed @ ${price}")
+            
+            return order_data
+            
+        except Exception as e:
+            logger.error(f"[ERROR] Order placement failed: {e}", exc_info=True)
+            return None
+    
     def _load_symbol_info(self, symbol: str):
         """Load symbol trading rules from Binance"""
         try:
