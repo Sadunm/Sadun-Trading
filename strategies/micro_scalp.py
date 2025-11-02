@@ -67,10 +67,23 @@ class MicroScalpStrategy(BaseStrategy):
             
             # STRICT FILTER 1: Volatility check (> 0.15%)
             if atr_pct < self.min_volatility_pct:
+                # Log occasionally to avoid spam
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_atr", 0)
+                self._filter_log_count[f"{symbol}_atr"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: ATR={atr_pct:.2f}% < {self.min_volatility_pct}% threshold")
                 return None  # Skip - not volatile enough
             
             # STRICT FILTER 2: RSI in neutral zone (35-55)
             if rsi < self.rsi_min or rsi > self.rsi_max:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_rsi", 0)
+                self._filter_log_count[f"{symbol}_rsi"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: RSI={rsi:.1f} not in [{self.rsi_min}-{self.rsi_max}] zone")
                 return None  # Skip - RSI outside neutral zone
             
             # STRICT FILTER 3: EMA crossover or EMA5 > EMA10
@@ -85,14 +98,32 @@ class MicroScalpStrategy(BaseStrategy):
                     ema_crossover = True
             
             if not ema_crossover:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_ema", 0)
+                self._filter_log_count[f"{symbol}_ema"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: EMA5={ema_5:.2f} <= EMA10={ema_10:.2f} (no crossover)")
                 return None  # Skip - no EMA confirmation
             
             # STRICT FILTER 4: Volume spike (≥ 1.2x average)
             if volume_ratio < self.volume_spike_ratio:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_vol", 0)
+                self._filter_log_count[f"{symbol}_vol"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Volume={volume_ratio:.2f}x < {self.volume_spike_ratio}x threshold")
                 return None  # Skip - insufficient volume
             
             # STRICT FILTER 5: Spread check (< 0.03%)
             if spread >= self.max_spread_pct:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_spread", 0)
+                self._filter_log_count[f"{symbol}_spread"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Spread={spread:.3f}% >= {self.max_spread_pct}% (low liquidity)")
                 return None  # Skip - spread too high (low liquidity)
             
             # ALL FILTERS PASSED - Generate BUY signal

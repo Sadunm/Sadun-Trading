@@ -30,10 +30,23 @@ class ScalpingStrategy(BaseStrategy):
             
             # BALANCED: Volume filter - need above-average volume but not too strict
             if volume_ratio < 1.2:  # Balanced: was 1.2, tried 1.3, back to 1.2
+                # Only log occasionally to avoid spam (every 50th check per symbol)
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(symbol, 0)
+                self._filter_log_count[symbol] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} SCALPING: Volume={volume_ratio:.2f}x < 1.2x threshold")
                 return None
             
             # BALANCED: ATR filter - need some volatility but not too strict
             if atr_pct < 0.5:  # Balanced: was 0.5, tried 0.6, back to 0.5
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_atr", 0)
+                self._filter_log_count[f"{symbol}_atr"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} SCALPING: ATR={atr_pct:.2f}% < 0.5% threshold")
                 return None
             
             # BALANCED: BUY signal - good conditions but not too restrictive
