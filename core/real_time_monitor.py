@@ -184,7 +184,15 @@ class RealTimePriceMonitor:
                 for key, position_info in positions_snapshot:
                     symbol = position_info['symbol']
                     strategy = position_info['strategy']
-                    current_price = self.api_client.get_current_price(symbol)
+                    
+                    # Get price (round-robin if available, otherwise direct)
+                    if hasattr(self.api_client, 'get_client'):
+                        # API rotator
+                        client = self.api_client.get_client()
+                        current_price = client.get_current_price(symbol)
+                    else:
+                        # Direct client
+                        current_price = self.api_client.get_current_price(symbol)
                     
                     if not current_price:
                         if check_count % 60 == 0:  # Log occasionally to avoid spam

@@ -5,7 +5,7 @@ import time
 from threading import Lock, Thread
 from queue import Empty
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from core.api_client import BinanceAPIClient
 from core.position_manager import PositionManager
 from core.risk_manager import RiskManager
@@ -21,6 +21,7 @@ from indicators.market_regime import MarketRegimeDetector
 from strategies.scalping import ScalpingStrategy
 from strategies.day_trading import DayTradingStrategy
 from strategies.momentum import MomentumStrategy
+from strategies.micro_scalp import MicroScalpStrategy
 from utils.config_loader import get_config
 from utils.profit_calculator import ProfitCalculator
 from utils.validators import clamp_value
@@ -32,7 +33,7 @@ logger = setup_logger("bot")
 class TradingBot:
     """Main trading bot orchestrator"""
     
-    def __init__(self, api_key: str, secret_key: str):
+    def __init__(self, api_key: str, secret_key: str, api_keys_list: Optional[List[Tuple[str, str]]] = None):
         # Load config
         try:
             self.config = get_config()
@@ -49,13 +50,23 @@ class TradingBot:
         self.trading_type = trading_config.get('trading_type', 'spot')
         self.use_maker_orders = trading_config.get('use_maker_orders', False)
         
-        # Initialize components
-        self.api_client = BinanceAPIClient(
-            api_key=api_key,
-            secret_key=secret_key,
-            testnet=trading_config.get('testnet', True),
-            max_retries=self.config.get_api_config().get('max_retries', 3)
-        )
+        # Initialize API client(s) - STRATEGY-1: Round-robin support
+        self.api_rotator = None
+        if api_keys_list and len(api_keys_list) > 1:
+            # Multiple keys: Use round-robin
+            from core.api_rotator import APIRotator
+            self.api_rotator = APIRotator(api_keys_list, testnet=trading_config.get('testnet', True))
+            self.api_client = self.api_rotator.get_client()  # Get primary client
+            logger.info(f"[API] Round-robin enabled with {len(api_keys_list)} keys")
+        else:
+            # Single key: Use direct client
+            self.api_client = BinanceAPIClient(
+                api_key=api_key,
+                secret_key=secret_key,
+                testnet=trading_config.get('testnet', True),
+                max_retries=self.config.get_api_config().get('max_retries', 3)
+            )
+            logger.info("[API] Single API key mode")
         
         self.market_data = MarketData(
             api_client=self.api_client,
@@ -101,6 +112,9 @@ class TradingBot:
         
         if strategies_config.get('momentum', {}).get('enabled', True):
             self.strategies['momentum'] = MomentumStrategy('momentum', strategies_config.get('momentum', {}))
+        
+        if strategies_config.get('micro_scalp', {}).get('enabled', False):
+            self.strategies['micro_scalp'] = MicroScalpStrategy('micro_scalp', strategies_config.get('micro_scalp', {}))
         
         # Trading state
         self.initial_capital = trading_config.get('initial_capital', 10000.0)
@@ -310,8 +324,13 @@ class TradingBot:
             if not strategy or not strategy.enabled:
                 return
             
-            # Check if we can open new position
+            # SAFETY CHECK: Position limit (max 3 positions for micro-scalp)
             current_positions = self.position_manager.get_open_positions_count()
+            can_open_safety, safety_reason = self.safety_manager.check_position_limit(current_positions)
+            if not can_open_safety:
+                return  # Skip - position limit reached
+            
+            # Check if we can open new position
             can_open, reason = self.risk_manager.can_open_position(current_positions)
             if not can_open:
                 return
@@ -338,6 +357,13 @@ class TradingBot:
                 logger.warning(f"[WARN] Invalid quantity calculated: {quantity}")
                 return
             
+            # SAFETY CHECK: Position size limit ($2 max for micro-scalp)
+            position_size_usd = quantity * price
+            can_size, size_reason = self.safety_manager.check_position_size(position_size_usd)
+            if not can_size:
+                logger.debug(f"[SAFETY] Position size check failed: {size_reason}")
+                return  # Skip - position too large
+            
             # Apply slippage and spread to entry price
             volatility = indicators.get('atr_pct', 0.0) / 100.0  # Convert to 0-1 range
             actual_entry_price = self.slippage_simulator.apply_slippage(
@@ -359,6 +385,17 @@ class TradingBot:
             if take_profit_pct < min_tp_pct:
                 logger.warning(f"[WARN] Take profit {take_profit_pct:.2f}% too low, adjusting to {min_tp_pct:.2f}%")
                 take_profit_pct = min_tp_pct
+            
+            # SAFETY CHECK: Fee guard (profit margin validation)
+            expected_fees_pct = (self.fee_calculator.calculate_round_trip_fee(position_size_usd) / position_size_usd) * 100.0 if position_size_usd > 0 else 0.2
+            fee_ok, fee_reason = self.safety_manager.check_fee_guard(
+                entry_price=actual_entry_price,
+                target_profit_pct=take_profit_pct,
+                expected_fees_pct=expected_fees_pct
+            )
+            if not fee_ok:
+                logger.debug(f"[SAFETY] Fee guard check failed: {fee_reason}")
+                return  # Skip - insufficient profit margin
             
             stop_loss = self.risk_manager.calculate_stop_loss(
                 entry_price=actual_entry_price,
@@ -414,12 +451,21 @@ class TradingBot:
                 stop_loss=stop_loss,
                 take_profit=take_profit
             ):
+                # Store entry volume ratio for micro-scalp strategy
+                position = self.position_manager.get_position(symbol, strategy_name)
+                if position:
+                    position.entry_volume_ratio = indicators.get('volume_ratio', 1.0)
+                
                 mode = "LIVE" if not self.paper_trading else "PAPER"
                 logger.info(f"[{mode}] Opened {signal['action']} position: {symbol} @ ${actual_entry_price:.2f} qty={quantity:.6f}")
                 logger.info(f"[COSTS] Entry price adjusted: ${price:.2f} -> ${actual_entry_price:.2f} (slippage + spread)")
                 
                 # Get partial profit taking config
                 partial_profit_enabled = trading_config.get('partial_profit_taking', True)
+                
+                # Micro-scalp: NO partial close (inefficient for $10 capital)
+                if strategy_name == 'micro_scalp':
+                    partial_profit_enabled = False
                 
                 # Add to real-time monitoring for immediate profit taking
                 self.price_monitor.add_position(
@@ -465,10 +511,13 @@ class TradingBot:
             else:  # SELL position (buying to close)
                 actual_exit_price = self.spread_simulator.get_ask_price(actual_exit_price, symbol)
             
-            # LIVE TRADING: Place actual SELL order on Binance
+            # LIVE TRADING: Place actual SELL order on Binance (with round-robin if enabled)
             if not self.paper_trading:
+                # Get client (round-robin or direct)
+                client = self.api_rotator.get_client() if self.api_rotator else self.api_client
+                
                 exit_action = 'SELL' if position.action == 'BUY' else 'BUY'
-                order_result = self.api_client.place_order(
+                order_result = client.place_order(
                     symbol=symbol,
                     side=exit_action,
                     quantity=position.quantity,  # Close full remaining quantity
@@ -513,6 +562,9 @@ class TradingBot:
                 self.current_capital += profit_data['net_profit']
                 self.risk_manager.record_trade(profit_data['net_profit'])
                 self.risk_manager.set_capital(self.initial_capital, self.current_capital)
+                
+                # SAFETY: Record trade result for kill-switch
+                self.safety_manager.record_trade_result(profit_data['net_profit'])
                 
                 logger.info(f"[PROFIT TAKEN] {symbol} - Net Profit: ${profit_data['net_profit']:.2f} ({profit_data['profit_pct']:.2f}%)")
                 logger.info(f"[COSTS] Entry: ${profit_data['entry_fee']:.2f}, Exit: ${profit_data['exit_fee']:.2f}, "
@@ -589,10 +641,13 @@ class TradingBot:
                 volatility=volatility
             )
             
-            # LIVE TRADING: Place actual SELL order for partial quantity
+            # LIVE TRADING: Place actual SELL order for partial quantity (with round-robin if enabled)
             if not self.paper_trading:
+                # Get client (round-robin or direct)
+                client = self.api_rotator.get_client() if self.api_rotator else self.api_client
+                
                 exit_action = 'SELL' if position.action == 'BUY' else 'BUY'
-                order_result = self.api_client.place_order(
+                order_result = client.place_order(
                     symbol=symbol,
                     side=exit_action,
                     quantity=close_quantity,  # Partial quantity (50% by default)
@@ -682,15 +737,36 @@ class TradingBot:
     def _check_position_exit(self, symbol: str, strategy_name: str, current_price: float):
         """Check if a position should be closed (backup check in main cycle)"""
         # Real-time monitor handles immediate exits
-        # This is just a backup check
+        # This is just a backup check + micro-scalp strategy exit logic
         try:
             position = self.position_manager.get_position(symbol, strategy_name)
             if not position or position.status != 'OPEN':
                 return
             
-            # Check time limit (real-time monitor doesn't check this)
-            hold_time = (datetime.now() - position.entry_time).total_seconds() / 60
             strategy = self.strategies.get(strategy_name)
+            
+            # Micro-scalp strategy: Use should_exit() method
+            if strategy_name == 'micro_scalp' and hasattr(strategy, 'should_exit'):
+                # Get current indicators for exit checks
+                klines = self.market_data.get_klines(symbol)
+                if klines:
+                    closes, highs, lows, volumes, opens = klines
+                    indicators = IndicatorCalculator.calculate_all(closes, highs, lows, volumes, opens)
+                    if indicators:
+                        # Add spread
+                        spread_decimal = self.spread_simulator.get_spread(symbol)
+                        indicators['spread'] = spread_decimal * 100
+                        
+                        # Check exit conditions
+                        exit_result = strategy.should_exit(position, current_price, indicators, datetime.now())
+                        if exit_result and exit_result.get('should_exit'):
+                            reason = exit_result.get('reason', 'STRATEGY_EXIT')
+                            logger.info(f"[{strategy_name.upper()}] {symbol} exit signal: {reason}")
+                            self._close_position_immediately(symbol, strategy_name, current_price, reason=reason)
+                            return
+            
+            # Default: Check time limit (real-time monitor doesn't check this)
+            hold_time = (datetime.now() - position.entry_time).total_seconds() / 60
             if strategy and hold_time >= strategy.max_hold_time_minutes:
                 logger.info(f"[TIME LIMIT] {symbol} ({strategy_name}) reached max hold time, closing...")
                 self._close_position_immediately(symbol, strategy_name, current_price, reason='TIME_LIMIT')

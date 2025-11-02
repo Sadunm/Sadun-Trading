@@ -38,6 +38,9 @@ class Position:
         self.exit_reason = None
         self.partial_closes = []  # Track partial closes: [{'quantity': float, 'price': float, 'pnl': float, 'reason': str, 'time': datetime}]
         self.total_partial_pnl = 0.0  # Sum of all partial close profits
+        # For micro-scalp strategy
+        self.entry_volume_ratio = 1.0  # Volume ratio at entry (for volume drop detection)
+        self.peak_profit_pct = 0.0  # Peak profit % (for trailing stop)
     
     def partial_close(self, close_quantity: float, exit_price: float, exit_reason: str, fees: float = 0.0) -> Dict:
         """

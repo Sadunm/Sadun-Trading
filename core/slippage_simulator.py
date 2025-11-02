@@ -112,6 +112,18 @@ class SpreadSimulator:
         'ADAUSDT': 0.0008,   # 0.08%
         'DOGEUSDT': 0.0008,  # 0.08%
         'MATICUSDT': 0.0008, # 0.08%
+        'DOTUSDT': 0.0008,   # 0.08%
+        'AVAXUSDT': 0.0008,  # 0.08%
+        'LINKUSDT': 0.0008,  # 0.08%
+        'NEARUSDT': 0.0009,  # 0.09%
+        'OPUSDT': 0.0009,    # 0.09%
+        'INJUSDT': 0.0009,   # 0.09%
+        'RNDRUSDT': 0.0009,  # 0.09%
+        'FTMUSDT': 0.0009,   # 0.09%
+        'TIAUSDT': 0.0010,   # 0.10%
+        'LTCUSDT': 0.0007,   # 0.07%
+        'ATOMUSDT': 0.0008,  # 0.08%
+        'SUIUSDT': 0.0010,   # 0.10%
         'default': 0.0010    # 0.10% for others
     }
     

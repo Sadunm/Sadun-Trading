@@ -4,17 +4,29 @@ trading:
   use_maker_orders: false   # true for limit orders, false for market orders
   initial_capital: 10.0     # Starting capital in USDT
   paper_trading: true        # Paper trading mode
-  symbols:                   # Trading pairs (expanded for more opportunities)
+  symbols:                   # STRATEGY-1: 20 coins (10 primary + 10 secondary)
+    # Primary Pool (High Liquidity, Predictable Moves)
     - BTCUSDT                # Priority 1 - Highest liquidity, lowest costs
     - ETHUSDT                # Priority 2 - Very high liquidity
     - BNBUSDT                # Priority 3 - Good spreads
     - SOLUSDT                # Priority 4 - Volatile, good opportunities
     - XRPUSDT                # Priority 5 - Stable, predictable
-    - ADAUSDT                # Priority 6 - High volume, good volatility
-    - DOGEUSDT               # Priority 7 - Popular, volatile
-    - MATICUSDT              # Priority 8 - Good liquidity
-    - DOTUSDT                # Priority 9 - Stable movements
-    - AVAXUSDT               # Priority 10 - Good opportunities
+    - DOGEUSDT               # Priority 6 - Popular, volatile
+    - AVAXUSDT               # Priority 7 - Good opportunities
+    - LINKUSDT               # Priority 8 - High volume
+    - ADAUSDT                # Priority 9 - High volume, good volatility
+    - DOTUSDT                # Priority 10 - Stable movements
+    # Secondary Pool (Volatility Boosters)
+    - NEARUSDT               # Priority 11 - Good volatility
+    - OPUSDT                 # Priority 12 - Volatile
+    - INJUSDT                # Priority 13 - High momentum
+    - RNDRUSDT               # Priority 14 - Volatile
+    - FTMUSDT                # Priority 15 - Good opportunities
+    - TIAUSDT                # Priority 16 - New, volatile
+    - LTCUSDT                # Priority 17 - Stable
+    - ATOMUSDT               # Priority 18 - Good spreads
+    - SUIUSDT                # Priority 19 - New, volatile
+    - MATICUSDT              # Priority 20 - Good liquidity
   scan_interval: 30         # Seconds between market scans
   kline_interval: "5m"      # Candlestick interval
   kline_limit: 200          # Number of candles to fetch
@@ -48,7 +60,7 @@ risk:
   take_profit_pct: 0.50           # Default take profit % (will be auto-adjusted to min)
   base_position_size_pct: 1.0     # Base position size
   min_position_size_usd: 1.0      # Minimum position (adjusted for $10 capital)
-  max_position_size_usd: 5.0      # Maximum position (adjusted for $10 capital - 50% max)
+  max_position_size_usd: 2.0      # STRATEGY-1: Max $2 per position (for $10 capital)
 
 strategies:
   scalping:
@@ -65,12 +77,19 @@ strategies:
     stop_loss_pct: 0.85        # Slightly wider - let winners run
     take_profit_pct: 0.55      # Balanced target (was 0.50, tried 0.65)
   
-  momentum:
-    enabled: true
-    confidence_threshold: 20.0  # BALANCED: Moderate filtering (was 18.0, tried 25.0)
-    max_hold_time_minutes: 480
-    stop_loss_pct: 1.2         # Wider stop - momentum needs room
-    take_profit_pct: 0.65      # Balanced target (was 0.60, tried 0.75)
+      momentum:
+        enabled: true
+        confidence_threshold: 20.0  # BALANCED: Moderate filtering (was 18.0, tried 25.0)
+        max_hold_time_minutes: 480
+        stop_loss_pct: 1.2         # Wider stop - momentum needs room
+        take_profit_pct: 0.65      # Balanced target (was 0.60, tried 0.75)
+      
+      micro_scalp:
+        enabled: true              # STRATEGY-1: Micro-Scalp Profit System
+        confidence_threshold: 25.0 # Strict entry (precision over frequency)
+        max_hold_time_minutes: 30  # 30 min timeout
+        stop_loss_pct: 0.15        # -0.15% stop loss
+        take_profit_pct: 0.45      # +0.45% target (covers 0.2% fees + 0.25% profit)
 
 api:
   max_retries: 3

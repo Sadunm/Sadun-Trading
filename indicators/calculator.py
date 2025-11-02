@@ -144,6 +144,42 @@ class IndicatorCalculator:
                 indicators['momentum_3'] = 0.0
                 indicators['momentum_10'] = 0.0
             
+            # EMA 5 and EMA 10 (for micro-scalp strategy)
+            try:
+                if len(closes_arr) >= 5:
+                    ema_5 = talib.EMA(closes_arr, timeperiod=5)
+                    indicators['ema_5'] = float(ema_5[-1]) if len(ema_5) > 0 and not np.isnan(ema_5[-1]) else float(closes_arr[-1])
+                    indicators['ema_5_prev'] = float(ema_5[-2]) if len(ema_5) > 1 and not np.isnan(ema_5[-2]) else float(closes_arr[-1])
+                else:
+                    indicators['ema_5'] = float(closes_arr[-1])
+                    indicators['ema_5_prev'] = float(closes_arr[-1])
+            except Exception:
+                indicators['ema_5'] = float(closes_arr[-1])
+                indicators['ema_5_prev'] = float(closes_arr[-1])
+            
+            try:
+                if len(closes_arr) >= 10:
+                    ema_10 = talib.EMA(closes_arr, timeperiod=10)
+                    indicators['ema_10'] = float(ema_10[-1]) if len(ema_10) > 0 and not np.isnan(ema_10[-1]) else float(closes_arr[-1])
+                    indicators['ema_10_prev'] = float(ema_10[-2]) if len(ema_10) > 1 and not np.isnan(ema_10[-2]) else float(closes_arr[-1])
+                else:
+                    indicators['ema_10'] = float(closes_arr[-1])
+                    indicators['ema_10_prev'] = float(closes_arr[-1])
+            except Exception:
+                indicators['ema_10'] = float(closes_arr[-1])
+                indicators['ema_10_prev'] = float(closes_arr[-1])
+            
+            # Spread calculation (percentage) - will be updated per symbol in bot
+            # Default 0.03% (will be replaced with actual spread per symbol)
+            try:
+                from core.slippage_simulator import SpreadSimulator
+                spread_sim = SpreadSimulator()
+                # Use BTCUSDT as default, will be overridden per symbol
+                spread_decimal = spread_sim.get_spread('BTCUSDT')
+                indicators['spread'] = spread_decimal * 100  # Convert to percentage
+            except Exception:
+                indicators['spread'] = 0.03  # 0.03% default
+            
             return indicators
             
         except Exception as e:
