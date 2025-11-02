@@ -25,7 +25,8 @@ class Position:
         self.strategy = strategy
         self.action = action.upper()  # BUY or SELL
         self.entry_price = entry_price
-        self.quantity = quantity
+        self.original_quantity = quantity  # Original full quantity
+        self.quantity = quantity  # Current remaining quantity (for partial closes)
         self.stop_loss = stop_loss
         self.take_profit = take_profit
         self.entry_time = datetime.now()
@@ -35,14 +36,81 @@ class Position:
         self.pnl_pct = 0.0
         self.status = 'OPEN'
         self.exit_reason = None
+        self.partial_closes = []  # Track partial closes: [{'quantity': float, 'price': float, 'pnl': float, 'reason': str, 'time': datetime}]
+        self.total_partial_pnl = 0.0  # Sum of all partial close profits
+    
+    def partial_close(self, close_quantity: float, exit_price: float, exit_reason: str, fees: float = 0.0) -> Dict:
+        """
+        Close partial quantity of position
+        Returns: {'closed_quantity': float, 'pnl': float, 'remaining_quantity': float, 'is_full_close': bool}
+        """
+        from utils.validators import safe_divide
+        
+        if not validate_price(exit_price) or not validate_quantity(close_quantity):
+            raise ValueError(f"Invalid price or quantity: price={exit_price}, qty={close_quantity}")
+        
+        if close_quantity > self.quantity:
+            close_quantity = self.quantity  # Clamp to available
+        
+        # Calculate P&L for this partial close
+        if self.action == 'BUY':
+            partial_pnl = (exit_price - self.entry_price) * close_quantity - fees
+        else:  # SELL
+            partial_pnl = (self.entry_price - exit_price) * close_quantity - fees
+        
+        # Track partial close
+        partial_data = {
+            'quantity': close_quantity,
+            'price': exit_price,
+            'pnl': partial_pnl,
+            'reason': exit_reason,
+            'time': datetime.now(),
+            'fees': fees
+        }
+        self.partial_closes.append(partial_data)
+        self.total_partial_pnl += partial_pnl
+        
+        # Update remaining quantity
+        self.quantity -= close_quantity
+        
+        # Check if fully closed
+        is_full_close = (self.quantity <= 0.00000001)  # Small tolerance for floating point
+        
+        if is_full_close:
+            # Fully closed - finalize
+            self.exit_price = exit_price
+            self.exit_time = datetime.now()
+            self.exit_reason = exit_reason
+            self.status = 'CLOSED'
+            self.quantity = 0.0
+            # Total P&L = sum of all partials
+            self.pnl = self.total_partial_pnl
+            # Calculate overall P&L percentage
+            total_value = self.original_quantity * self.entry_price
+            self.pnl_pct = safe_divide(self.pnl, total_value, 0.0) * 100.0
+        
+        return {
+            'closed_quantity': close_quantity,
+            'pnl': partial_pnl,
+            'remaining_quantity': self.quantity,
+            'is_full_close': is_full_close,
+            'total_pnl': self.total_partial_pnl
+        }
     
     def close(self, exit_price: float, exit_reason: str, fees: float = 0.0):
-        """Close the position and calculate P&L"""
+        """Close the FULL remaining position and calculate total P&L"""
         from utils.validators import safe_divide
         
         if not validate_price(exit_price):
             raise ValueError(f"Invalid exit price: {exit_price}")
         
+        # If already have partial closes, add this as final partial
+        if len(self.partial_closes) > 0:
+            # This is closing remaining quantity
+            final_close = self.partial_close(self.quantity, exit_price, exit_reason, fees)
+            return  # partial_close already finalizes everything
+        
+        # No partial closes - full close as before
         self.exit_price = exit_price
         self.exit_time = datetime.now()
         self.exit_reason = exit_reason
@@ -63,6 +131,8 @@ class Position:
                 self.entry_price,
                 0.0
             ) * 100
+        
+        self.quantity = 0.0  # Fully closed
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization"""
@@ -71,16 +141,28 @@ class Position:
             'strategy': self.strategy,
             'action': self.action,
             'entry_price': self.entry_price,
-            'quantity': self.quantity,
+            'original_quantity': self.original_quantity,
+            'quantity': self.quantity,  # Current remaining
             'stop_loss': self.stop_loss,
             'take_profit': self.take_profit,
             'entry_time': self.entry_time.isoformat(),
             'exit_price': self.exit_price,
             'exit_time': self.exit_time.isoformat() if self.exit_time else None,
-            'pnl': self.pnl,
+            'pnl': self.pnl if self.status == 'CLOSED' else self.total_partial_pnl,  # Show partial P&L if open
             'pnl_pct': self.pnl_pct,
             'status': self.status,
-            'exit_reason': self.exit_reason
+            'exit_reason': self.exit_reason,
+            'partial_closes': [
+                {
+                    'quantity': pc['quantity'],
+                    'price': pc['price'],
+                    'pnl': pc['pnl'],
+                    'reason': pc['reason'],
+                    'time': pc['time'].isoformat()
+                }
+                for pc in self.partial_closes
+            ],
+            'total_partial_pnl': self.total_partial_pnl
         }
 
 
@@ -128,9 +210,36 @@ class PositionManager:
             logger.error(f"[ERROR] Error opening position: {e}", exc_info=True)
             return False
     
+    def partial_close_position(self, symbol: str, strategy: str, close_quantity: float,
+                               exit_price: float, exit_reason: str, fees: float = 0.0) -> Optional[Dict]:
+        """Close partial quantity of position (thread-safe)"""
+        try:
+            key = f"{symbol}_{strategy}"
+            
+            with self.lock:
+                if key not in self.positions:
+                    logger.warning(f"[WARN] Position not found: {key}")
+                    return None
+                
+                position = self.positions[key]
+                result = position.partial_close(close_quantity, exit_price, exit_reason, fees)
+                
+                # If fully closed, remove from open positions
+                if result['is_full_close']:
+                    del self.positions[key]
+                    logger.info(f"[OK] Fully closed position: {symbol} Total P&L=${position.pnl:.2f} ({position.pnl_pct:.2f}%)")
+                    return {'position': position, **result}
+                else:
+                    logger.info(f"[PARTIAL] Closed {close_quantity:.6f} of {symbol}: P&L=${result['pnl']:.2f}, Remaining={result['remaining_quantity']:.6f}")
+                    return {'position': position, **result}
+                
+        except Exception as e:
+            logger.error(f"[ERROR] Error partial closing position: {e}", exc_info=True)
+            return None
+    
     def close_position(self, symbol: str, strategy: str, exit_price: float, 
                       exit_reason: str, fees: float = 0.0) -> Optional[Position]:
-        """Close an existing position (thread-safe)"""
+        """Close FULL remaining position (thread-safe)"""
         try:
             key = f"{symbol}_{strategy}"
             
@@ -145,7 +254,7 @@ class PositionManager:
                 # Remove from open positions
                 del self.positions[key]
                 
-                logger.info(f"[OK] Closed position: {symbol} P&L=${position.pnl:.2f} ({position.pnl_pct:.2f}%)")
+                logger.info(f"[OK] Closed position: {symbol} Total P&L=${position.pnl:.2f} ({position.pnl_pct:.2f}%)")
                 return position
                 
         except Exception as e:

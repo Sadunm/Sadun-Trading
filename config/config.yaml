@@ -25,6 +25,10 @@ trading:
   take_profit_immediately: true  # NO delays - close instantly when target reached
   stop_loss_immediately: true
   
+  # Smart Partial Profit Taking (Your Idea!)
+  partial_profit_taking: true  # Enable partial close when fees covered
+  partial_close_pct: 50.0  # Close 50% when fees covered (remaining waits for target/neutral)
+  
   # Minimum profit targets (after all fees)
   min_take_profit_pct: 0.40   # Spot: 0.40% minimum (covers 0.20% fees + 0.20% profit)
   min_take_profit_futures_pct: 0.25  # Futures: 0.25% minimum

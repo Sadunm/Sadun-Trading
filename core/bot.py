@@ -148,8 +148,13 @@ class TradingBot:
                             logger.info(f"[PROFIT TARGET] {symbol} ({strategy}) reached target! Taking profit NOW at ${current_price:.2f}...")
                             self._close_position_immediately(symbol, strategy, current_price, reason='TAKE_PROFIT')
                         
+                        elif signal == 'PARTIAL_FEES_PROFIT':
+                            # FEES COVERED - PARTIAL CLOSE (Your Smart Idea!)
+                            logger.info(f"[PARTIAL FEES] {symbol} ({strategy}) fees covered! Partial closing NOW at ${current_price:.2f}...")
+                            self._partial_close_for_fees(symbol, strategy, current_price)
+                        
                         elif signal == 'BREAKEVEN_PROFIT':
-                            # FEES COVERED + SMALL PROFIT - CLOSE IMMEDIATELY!
+                            # FEES COVERED + SMALL PROFIT - FULL CLOSE (fallback if partial disabled)
                             logger.info(f"[FEES COVERED] {symbol} ({strategy}) fees covered + small profit! Closing NOW at ${current_price:.2f}...")
                             self._close_position_immediately(symbol, strategy, current_price, reason='FEES_COVERED_PROFIT')
                         
@@ -391,6 +396,9 @@ class TradingBot:
                 logger.info(f"[OK] Opened {signal['action']} position: {symbol} @ ${actual_entry_price:.2f} qty={quantity:.6f}")
                 logger.info(f"[COSTS] Entry price adjusted: ${price:.2f} -> ${actual_entry_price:.2f} (slippage + spread)")
                 
+                # Get partial profit taking config
+                partial_profit_enabled = trading_config.get('partial_profit_taking', True)
+                
                 # Add to real-time monitoring for immediate profit taking
                 self.price_monitor.add_position(
                     symbol=symbol,
@@ -399,7 +407,8 @@ class TradingBot:
                     quantity=quantity,
                     target_profit_pct=take_profit_pct,
                     stop_loss_pct=stop_loss_pct,
-                    action=signal['action']
+                    action=signal['action'],
+                    partial_profit_enabled=partial_profit_enabled
                 )
         except Exception as e:
             logger.error(f"[ERROR] Error checking position entry: {e}", exc_info=True)
@@ -494,6 +503,119 @@ class TradingBot:
                 
         except Exception as e:
             logger.error(f"[ERROR] Error closing position immediately: {e}", exc_info=True)
+    
+    def _partial_close_for_fees(
+        self,
+        symbol: str,
+        strategy_name: str,
+        exit_price: float
+    ):
+        """Partial close when fees are covered (Your Smart Idea!)"""
+        try:
+            # Get position
+            position = self.position_manager.get_position(symbol, strategy_name)
+            if not position or position.status != 'OPEN':
+                return
+            
+            # Get config
+            trading_config = self.config.get_trading_config()
+            partial_close_pct = trading_config.get('partial_close_pct', 50.0) / 100.0  # Convert to 0-1
+            
+            # Calculate how much to close (percentage of current quantity)
+            close_quantity = position.quantity * partial_close_pct
+            
+            # Calculate fees for this partial close
+            volatility = 0.0
+            exit_action = 'SELL' if position.action == 'BUY' else 'BUY'
+            
+            # Apply slippage and spread
+            actual_exit_price = self.slippage_simulator.apply_slippage(
+                symbol, exit_price, exit_action, volatility
+            )
+            if position.action == 'BUY':  # Selling
+                actual_exit_price = self.spread_simulator.get_bid_price(actual_exit_price, symbol)
+            else:  # SELL position (buying to close)
+                actual_exit_price = self.spread_simulator.get_ask_price(actual_exit_price, symbol)
+            
+            # Calculate fees for partial close
+            partial_profit_data = self.profit_calculator.calculate_net_profit(
+                symbol=symbol,
+                entry_price=position.entry_price,
+                exit_price=actual_exit_price,
+                quantity=close_quantity,
+                action=position.action,
+                volatility=volatility
+            )
+            
+            # Partial close
+            result = self.position_manager.partial_close_position(
+                symbol=symbol,
+                strategy=strategy_name,
+                close_quantity=close_quantity,
+                exit_price=actual_exit_price,
+                exit_reason='PARTIAL_FEES_PROFIT',
+                fees=partial_profit_data['total_costs']
+            )
+            
+            if result:
+                partial_pnl = result['pnl']
+                remaining_qty = result['remaining_quantity']
+                
+                # Update capital with partial profit
+                self.current_capital += partial_pnl
+                self.risk_manager.record_trade(partial_pnl)
+                self.risk_manager.set_capital(self.initial_capital, self.current_capital)
+                
+                logger.info(f"[PARTIAL CLOSE] {symbol} - Closed {close_quantity:.6f}, P&L: ${partial_pnl:.2f}, Remaining: {remaining_qty:.6f}")
+                
+                # Update monitor with remaining quantity
+                if not result['is_full_close']:
+                    # Re-add remaining position to monitor (with updated quantity)
+                    position = self.position_manager.get_position(symbol, strategy_name)
+                    if position:  # Still has remaining
+                        # Calculate percentages from stop/take profit
+                        if position.action == 'BUY':
+                            stop_loss_pct = ((position.entry_price - position.stop_loss) / position.entry_price) * 100.0
+                            take_profit_pct = ((position.take_profit - position.entry_price) / position.entry_price) * 100.0
+                        else:
+                            stop_loss_pct = ((position.stop_loss - position.entry_price) / position.entry_price) * 100.0
+                            take_profit_pct = ((position.entry_price - position.take_profit) / position.entry_price) * 100.0
+                        
+                        # Remove old monitor entry first
+                        self.price_monitor.remove_position(symbol, strategy_name)
+                        
+                        # Re-add to monitor (will update existing entry)
+                        partial_profit_enabled = trading_config.get('partial_profit_taking', True)
+                        self.price_monitor.add_position(
+                            symbol=symbol,
+                            strategy=strategy_name,
+                            entry_price=position.entry_price,  # Original entry price
+                            quantity=remaining_qty,  # Updated quantity
+                            target_profit_pct=take_profit_pct,
+                            stop_loss_pct=stop_loss_pct,
+                            action=position.action,
+                            partial_profit_enabled=False  # Already did partial, wait for target or neutral
+                        )
+                        logger.info(f"[MONITOR] Updated monitor for remaining {remaining_qty:.6f} of {symbol}")
+                
+                # Auto compounding
+                if partial_pnl > 0:
+                    compounded = self.compound_manager.add_profit(partial_pnl)
+                    if compounded > 0:
+                        with self.lock:
+                            old_capital = self.current_capital
+                            self.current_capital += compounded
+                            self.initial_capital = self.current_capital
+                            self.risk_manager.set_capital(self.initial_capital, self.current_capital)
+                        logger.info(f"[COMPOUND] Capital: ${old_capital:.2f} → ${self.current_capital:.2f}")
+                
+                # Save partial close (will save to CSV when fully closed)
+                logger.info(f"[PARTIAL SAVED] {symbol} Partial close recorded: ${partial_pnl:.2f}")
+            else:
+                logger.warning(f"[WARN] Partial close failed for {symbol}")
+                
+        except Exception as e:
+            logger.error(f"[ERROR] Error partial closing for fees: {e}", exc_info=True)
     
     def _check_position_exit(self, symbol: str, strategy_name: str, current_price: float):
         """Check if a position should be closed (backup check in main cycle)"""
