@@ -260,6 +260,19 @@ class TradingBot:
     def _trading_cycle(self):
         """Execute one trading cycle"""
         try:
+            # SAFETY CHECK 1: Kill-switch (3 consecutive losses)
+            can_trade_safety, safety_reason = self.safety_manager.check_kill_switch()
+            if not can_trade_safety:
+                logger.warning(f"[SAFETY] Trading paused: {safety_reason}")
+                return
+            
+            # SAFETY CHECK 2: Ping test (API latency)
+            if self.api_rotator:
+                ping_ok, latency = self.api_rotator.ping_test(max_latency_ms=100)
+                if not ping_ok:
+                    logger.warning(f"[SAFETY] High API latency: {latency}ms (limit: 100ms), skipping cycle")
+                    return
+            
             # Check if trading is allowed
             can_trade, reason = self.risk_manager.can_trade()
             if not can_trade:

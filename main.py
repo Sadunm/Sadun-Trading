@@ -57,24 +57,38 @@ def main():
         
         trading_config = config.get_trading_config()
         
-        # Get API credentials from environment
+        # Get API credentials from environment (STRATEGY-1: Support multiple keys)
+        # Primary key (required)
         api_key = os.environ.get('BINANCE_API_KEY', '').strip()
         secret_key = os.environ.get('BINANCE_SECRET_KEY', '').strip()
         
-        # Validate API keys
-        if not api_key or not secret_key:
-            logger.error("[ERROR] BINANCE_API_KEY and BINANCE_SECRET_KEY not set!")
-            logger.info("Please set them in:")
-            logger.info("  - .env file (for local development)")
-            logger.info("  - Environment variables (for cloud deployment like Render)")
-            logger.info("  - Render Dashboard → Environment tab")
+        # Additional keys for round-robin (optional)
+        api_key_2 = os.environ.get('BINANCE_API_KEY_2', '').strip()
+        secret_key_2 = os.environ.get('BINANCE_SECRET_KEY_2', '').strip()
+        api_key_3 = os.environ.get('BINANCE_API_KEY_3', '').strip()
+        secret_key_3 = os.environ.get('BINANCE_SECRET_KEY_3', '').strip()
+        
+        # Build API keys list for round-robin
+        api_keys_list = []
+        if api_key and secret_key:
+            api_keys_list.append((api_key, secret_key))
+        if api_key_2 and secret_key_2:
+            api_keys_list.append((api_key_2, secret_key_2))
+        if api_key_3 and secret_key_3:
+            api_keys_list.append((api_key_3, secret_key_3))
+        
+        # Validate at least one API key
+        if not api_keys_list:
+            logger.error("[ERROR] No API keys found!")
+            logger.info("Please set at least BINANCE_API_KEY and BINANCE_SECRET_KEY")
+            logger.info("Optional: BINANCE_API_KEY_2, BINANCE_SECRET_KEY_2, etc. for round-robin")
             sys.exit(1)
         
-        logger.info(f"[OK] API keys loaded (lengths: {len(api_key)}, {len(secret_key)})")
+        logger.info(f"[OK] Loaded {len(api_keys_list)} API key(s) (round-robin: {'enabled' if len(api_keys_list) > 1 else 'disabled'})")
         
         # Create bot instance
         logger.info("[INFO] Creating TradingBot instance...")
-        bot = TradingBot(api_key=api_key, secret_key=secret_key)
+        bot = TradingBot(api_key=api_key, secret_key=secret_key, api_keys_list=api_keys_list if len(api_keys_list) > 1 else None)
         logger.info("[INFO] TradingBot instance created successfully")
         
         # Start Flask server in background
