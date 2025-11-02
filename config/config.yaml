@@ -77,19 +77,19 @@ strategies:
     stop_loss_pct: 0.85        # Slightly wider - let winners run
     take_profit_pct: 0.55      # Balanced target (was 0.50, tried 0.65)
   
-      momentum:
-        enabled: true
-        confidence_threshold: 20.0  # BALANCED: Moderate filtering (was 18.0, tried 25.0)
-        max_hold_time_minutes: 480
-        stop_loss_pct: 1.2         # Wider stop - momentum needs room
-        take_profit_pct: 0.65      # Balanced target (was 0.60, tried 0.75)
-      
-      micro_scalp:
-        enabled: true              # STRATEGY-1: Micro-Scalp Profit System
-        confidence_threshold: 25.0 # Strict entry (precision over frequency)
-        max_hold_time_minutes: 30  # 30 min timeout
-        stop_loss_pct: 0.15        # -0.15% stop loss
-        take_profit_pct: 0.45      # +0.45% target (covers 0.2% fees + 0.25% profit)
+  momentum:
+    enabled: true
+    confidence_threshold: 20.0  # BALANCED: Moderate filtering (was 18.0, tried 25.0)
+    max_hold_time_minutes: 480
+    stop_loss_pct: 1.2         # Wider stop - momentum needs room
+    take_profit_pct: 0.65      # Balanced target (was 0.60, tried 0.75)
+  
+  micro_scalp:
+    enabled: true              # STRATEGY-1: Micro-Scalp Profit System
+    confidence_threshold: 25.0 # Strict entry (precision over frequency)
+    max_hold_time_minutes: 30  # 30 min timeout
+    stop_loss_pct: 0.15        # -0.15% stop loss
+    take_profit_pct: 0.45      # +0.45% target (covers 0.2% fees + 0.25% profit)
 
 api:
   max_retries: 3
