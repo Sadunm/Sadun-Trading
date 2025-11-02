@@ -305,6 +305,12 @@ class TradingBot:
                 return
             
             # Scan each symbol
+            # Log scan cycle start (every 10 cycles to avoid spam)
+            if not hasattr(self, '_scan_count'):
+                self._scan_count = 0
+            self._scan_count += 1
+            if self._scan_count % 10 == 0:
+                logger.info(f"[SCAN] Scan cycle #{self._scan_count} - Scanning {len(self.symbols)} symbols")
             for symbol in self.symbols:
                 try:
                     self._scan_symbol(symbol)
@@ -319,6 +325,7 @@ class TradingBot:
             # Get market data
             klines = self.market_data.get_klines(symbol)
             if not klines:
+                logger.debug(f"[SCAN] {symbol}: No klines data")
                 return
             
             closes, highs, lows, volumes, opens = klines
@@ -326,6 +333,7 @@ class TradingBot:
             # Calculate indicators
             indicators = IndicatorCalculator.calculate_all(closes, highs, lows, volumes, opens)
             if not indicators:
+                logger.debug(f"[SCAN] {symbol}: No indicators calculated")
                 return
             
             # Detect market regime
@@ -335,6 +343,7 @@ class TradingBot:
             # Get current price
             current_price = self.market_data.get_current_price(symbol)
             if not current_price:
+                logger.debug(f"[SCAN] {symbol}: No current price")
                 return
             
             # Check existing positions
@@ -366,23 +375,30 @@ class TradingBot:
             current_positions = self.position_manager.get_open_positions_count()
             can_open_safety, safety_reason = self.safety_manager.check_position_limit(current_positions)
             if not can_open_safety:
+                logger.debug(f"[SAFETY] {symbol} ({strategy_name}): Position limit reached ({current_positions})")
                 return  # Skip - position limit reached
             
             # Check if we can open new position
             can_open, reason = self.risk_manager.can_open_position(current_positions)
             if not can_open:
+                logger.debug(f"[RISK] {symbol} ({strategy_name}): Cannot open - {reason}")
                 return
             
             # Generate signal
             signal = strategy.generate_signal(symbol, indicators, price, market_regime)
             if not signal:
+                logger.debug(f"[SIGNAL] {symbol} ({strategy_name}): No signal generated")
                 return
             
             # Check confidence threshold
             confidence = signal.get('confidence', 0.0)
             confidence = clamp_value(confidence, 0.0, 100.0)  # Ensure 0-100
             
+            # Log all signals (even if below threshold) - important for debugging
+            logger.info(f"[SIGNAL] {symbol} ({strategy_name}): {signal.get('action')} signal, Conf={confidence:.1f}%, Threshold={strategy.confidence_threshold:.1f}%")
+            
             if confidence < strategy.confidence_threshold:
+                logger.info(f"[SKIP] {symbol} ({strategy_name}): Confidence {confidence:.1f}% < {strategy.confidence_threshold:.1f}% threshold - SKIPPED")
                 return
             
             # Calculate position size
@@ -399,7 +415,7 @@ class TradingBot:
             position_size_usd = quantity * price
             can_size, size_reason = self.safety_manager.check_position_size(position_size_usd)
             if not can_size:
-                logger.debug(f"[SAFETY] Position size check failed: {size_reason}")
+                logger.debug(f"[SAFETY] {symbol} ({strategy_name}): Position size check failed - {size_reason}")
                 return  # Skip - position too large
             
             # Apply slippage and spread to entry price
@@ -432,7 +448,7 @@ class TradingBot:
                 expected_fees_pct=expected_fees_pct
             )
             if not fee_ok:
-                logger.debug(f"[SAFETY] Fee guard check failed: {fee_reason}")
+                logger.debug(f"[SAFETY] {symbol} ({strategy_name}): Fee guard check failed - {fee_reason}")
                 return  # Skip - insufficient profit margin
             
             stop_loss = self.risk_manager.calculate_stop_loss(
