@@ -27,12 +27,12 @@ class MicroScalpStrategy(BaseStrategy):
         self.stop_loss_pct = 0.15  # -0.15% stop loss
         self.take_profit_pct = 0.45  # +0.45% target (covers 0.2% fees + 0.25% profit)
         
-        # Entry filters (STRICT)
-        self.min_volatility_pct = 0.15  # Volatility > 0.15% (5m)
-        self.rsi_min = 35  # RSI between 35-55 (neutral zone)
-        self.rsi_max = 55
-        self.volume_spike_ratio = 1.2  # Volume ≥ 1.2x average
-        self.max_spread_pct = 0.03  # Spread < 0.03%
+        # Entry filters (RELAXED for testnet/low volume markets)
+        self.min_volatility_pct = 0.10  # Volatility > 0.10% (5m) - relaxed from 0.15%
+        self.rsi_min = 30  # RSI between 30-60 (neutral zone) - expanded from 35-55
+        self.rsi_max = 60
+        self.volume_spike_ratio = 0.8  # Volume ≥ 0.8x average - relaxed from 1.2x (testnet has low volume)
+        self.max_spread_pct = 0.05  # Spread < 0.05% - relaxed from 0.03%
         
         # Exit enhancements
         self.trailing_start_pct = 0.3  # Start trailing when profit > +0.3%
@@ -73,7 +73,7 @@ class MicroScalpStrategy(BaseStrategy):
                 count = self._filter_log_count.get(f"{symbol}_atr", 0)
                 self._filter_log_count[f"{symbol}_atr"] = count + 1
                 if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: ATR={atr_pct:.2f}% < {self.min_volatility_pct}% threshold")
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: ATR={atr_pct:.2f}% < {self.min_volatility_pct:.2f}% threshold")
                 return None  # Skip - not volatile enough
             
             # STRICT FILTER 2: RSI in neutral zone (35-55)
@@ -113,7 +113,7 @@ class MicroScalpStrategy(BaseStrategy):
                 count = self._filter_log_count.get(f"{symbol}_vol", 0)
                 self._filter_log_count[f"{symbol}_vol"] = count + 1
                 if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Volume={volume_ratio:.2f}x < {self.volume_spike_ratio}x threshold")
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Volume={volume_ratio:.2f}x < {self.volume_spike_ratio:.1f}x threshold")
                 return None  # Skip - insufficient volume
             
             # STRICT FILTER 5: Spread check (< 0.03%)

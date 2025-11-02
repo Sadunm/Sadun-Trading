@@ -31,8 +31,8 @@ class DayTradingStrategy(BaseStrategy):
             bb_upper = indicators.get('bb_upper', price)
             bb_lower = indicators.get('bb_lower', price)
             
-            # BALANCED: Volume filter - avoid very low volume but allow moderate
-            if volume_ratio < 1.1:  # Balanced: was 1.0, tried 1.2, balanced at 1.1
+            # RELAXED: Volume filter - relaxed for testnet (which has low volume)
+            if volume_ratio < 0.85:  # Relaxed: 1.1x → 0.85x for testnet compatibility
                 return None
             
             # BALANCED: BUY signal - good conditions but not overly strict

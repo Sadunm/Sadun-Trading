@@ -28,25 +28,25 @@ class ScalpingStrategy(BaseStrategy):
             momentum_3 = indicators.get('momentum_3', 0.0)
             atr_pct = indicators.get('atr_pct', 0.0)
             
-            # BALANCED: Volume filter - need above-average volume but not too strict
-            if volume_ratio < 1.2:  # Balanced: was 1.2, tried 1.3, back to 1.2
+            # RELAXED: Volume filter - relaxed for testnet (which has low volume)
+            if volume_ratio < 0.9:  # Relaxed: 1.2x → 0.9x for testnet compatibility
                 # Only log occasionally to avoid spam (every 50th check per symbol)
                 if not hasattr(self, '_filter_log_count'):
                     self._filter_log_count = {}
                 count = self._filter_log_count.get(symbol, 0)
                 self._filter_log_count[symbol] = count + 1
                 if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} SCALPING: Volume={volume_ratio:.2f}x < 1.2x threshold")
+                    logger.info(f"[FILTER] {symbol} SCALPING: Volume={volume_ratio:.2f}x < 0.9x threshold")
                 return None
             
-            # BALANCED: ATR filter - need some volatility but not too strict
-            if atr_pct < 0.5:  # Balanced: was 0.5, tried 0.6, back to 0.5
+            # RELAXED: ATR filter - relaxed for low volatility markets
+            if atr_pct < 0.3:  # Relaxed: 0.5% → 0.3% for testnet compatibility
                 if not hasattr(self, '_filter_log_count'):
                     self._filter_log_count = {}
                 count = self._filter_log_count.get(f"{symbol}_atr", 0)
                 self._filter_log_count[f"{symbol}_atr"] = count + 1
                 if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} SCALPING: ATR={atr_pct:.2f}% < 0.5% threshold")
+                    logger.info(f"[FILTER] {symbol} SCALPING: ATR={atr_pct:.2f}% < 0.3% threshold")
                 return None
             
             # BALANCED: BUY signal - good conditions but not too restrictive
