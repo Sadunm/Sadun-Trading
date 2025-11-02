@@ -29,16 +29,16 @@ class MomentumStrategy(BaseStrategy):
             volume_ratio = indicators.get('volume_ratio', 1.0)
             macd_hist = indicators.get('macd_hist', 0.0)
             
-            # IMPROVED: Stricter volume filter - momentum needs volume
-            if volume_ratio < 1.3:  # Increased from 1.1
+            # BALANCED: Volume filter - momentum needs volume but not too strict
+            if volume_ratio < 1.2:  # Balanced: was 1.1, tried 1.3, balanced at 1.2
                 return None
             
-            # IMPROVED: BUY signal - stronger momentum requirements
-            if momentum_3 > 0.6 and momentum_10 > 0.4 and macd_hist > 0.001:  # Stricter: higher momentum (was 0.5/0.3), MACD clearly positive
-                if rsi < 65:  # Stricter: not too overbought (was 70)
-                    # Additional check: both momentum indicators aligned
-                    if momentum_3 > momentum_10:  # Short-term stronger than long-term
-                        confidence = self.calculate_confidence(indicators, 'BUY', 25.0)  # Higher base (was 22.0)
+            # BALANCED: BUY signal - good momentum but not overly strict
+            if momentum_3 > 0.55 and momentum_10 > 0.35 and macd_hist > 0:  # Balanced: momentum (was 0.5/0.3, tried 0.6/0.4), MACD positive (was >0, tried >0.001)
+                if rsi < 68:  # Balanced: not too overbought (was 70, tried 65)
+                    # Check: momentum indicators aligned (preferred but not required if strong enough)
+                    if momentum_3 >= momentum_10 * 0.8:  # Short-term at least 80% of long-term (was strict >)
+                        confidence = self.calculate_confidence(indicators, 'BUY', 22.0)  # Balanced base (was 22.0, tried 25.0)
                         if confidence >= self.confidence_threshold:
                             logger.info(f"[OK] {symbol} MOMENTUM BUY: Mom3={momentum_3:.2f}, Mom10={momentum_10:.2f}, Conf={confidence:.1f}%")
                             return {
@@ -47,12 +47,12 @@ class MomentumStrategy(BaseStrategy):
                                 'reason': 'Strong Momentum Uptrend'
                             }
             
-            # IMPROVED: SELL signal - stronger momentum requirements
-            if momentum_3 < -0.6 and momentum_10 < -0.4 and macd_hist < -0.001:  # Stricter: stronger negative momentum (was -0.5/-0.3), MACD clearly negative
-                if rsi > 35:  # Stricter: not too oversold (was 30)
-                    # Additional check: both momentum indicators aligned
-                    if momentum_3 < momentum_10:  # Short-term weaker than long-term
-                        confidence = self.calculate_confidence(indicators, 'SELL', 25.0)  # Higher base (was 22.0)
+            # BALANCED: SELL signal - good momentum but not overly strict
+            if momentum_3 < -0.55 and momentum_10 < -0.35 and macd_hist < 0:  # Balanced: momentum (was -0.5/-0.3, tried -0.6/-0.4), MACD negative (was <0, tried <-0.001)
+                if rsi > 32:  # Balanced: not too oversold (was 30, tried 35)
+                    # Check: momentum indicators aligned (preferred but not required if strong enough)
+                    if momentum_3 <= momentum_10 * 0.8:  # Short-term at most 80% of long-term (was strict <)
+                        confidence = self.calculate_confidence(indicators, 'SELL', 22.0)  # Balanced base (was 22.0, tried 25.0)
                         if confidence >= self.confidence_threshold:
                             logger.info(f"[OK] {symbol} MOMENTUM SELL: Mom3={momentum_3:.2f}, Mom10={momentum_10:.2f}, Conf={confidence:.1f}%")
                             return {

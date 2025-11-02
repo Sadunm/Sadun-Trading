@@ -4,12 +4,17 @@ trading:
   use_maker_orders: false   # true for limit orders, false for market orders
   initial_capital: 10000.0   # Starting capital in USDT
   paper_trading: true        # Paper trading mode
-  symbols:                   # Trading pairs (best for scalping)
+  symbols:                   # Trading pairs (expanded for more opportunities)
     - BTCUSDT                # Priority 1 - Highest liquidity, lowest costs
     - ETHUSDT                # Priority 2 - Very high liquidity
     - BNBUSDT                # Priority 3 - Good spreads
     - SOLUSDT                # Priority 4 - Volatile, good opportunities
     - XRPUSDT                # Priority 5 - Stable, predictable
+    - ADAUSDT                # Priority 6 - High volume, good volatility
+    - DOGEUSDT               # Priority 7 - Popular, volatile
+    - MATICUSDT              # Priority 8 - Good liquidity
+    - DOTUSDT                # Priority 9 - Stable movements
+    - AVAXUSDT               # Priority 10 - Good opportunities
   scan_interval: 30         # Seconds between market scans
   kline_interval: "5m"      # Candlestick interval
   kline_limit: 200          # Number of candles to fetch
@@ -31,7 +36,7 @@ trading:
 
 risk:
   max_position_size_pct: 2.0      # Max 2% per position
-  max_total_positions: 5          # Max concurrent positions
+  max_total_positions: 8          # INCREASED: More positions for more coins (was 5)
   max_daily_trades: 1000           # High limit for scalping (immediate profit taking)
   max_daily_loss_pct: 2.0         # Stop if lose 2% in day
   max_drawdown_pct: 5.0           # Emergency stop at 5% drawdown
@@ -44,24 +49,24 @@ risk:
 strategies:
   scalping:
     enabled: true
-    confidence_threshold: 25.0  # INCREASED: Only take strong signals (was 15.0)
+    confidence_threshold: 20.0  # BALANCED: Good filtering but not too strict (was 15.0, tried 25.0)
     max_hold_time_minutes: 180
-    stop_loss_pct: 0.35        # Slightly wider stop (was 0.30) - reduce false stops
-    take_profit_pct: 0.55      # Slightly higher target for better R:R (was 0.50)
+    stop_loss_pct: 0.35        # Slightly wider stop - reduce false stops
+    take_profit_pct: 0.50      # Balanced target (will be auto-adjusted to min 0.40%)
   
   day_trading:
     enabled: true
-    confidence_threshold: 28.0  # INCREASED: Strong signals only (was 20.0)
+    confidence_threshold: 22.0  # BALANCED: Moderate filtering (was 20.0, tried 28.0)
     max_hold_time_minutes: 1440
-    stop_loss_pct: 0.85        # Slightly wider (was 0.80) - let winners run
-    take_profit_pct: 0.65      # Higher target for better profits (was 0.50)
+    stop_loss_pct: 0.85        # Slightly wider - let winners run
+    take_profit_pct: 0.55      # Balanced target (was 0.50, tried 0.65)
   
   momentum:
     enabled: true
-    confidence_threshold: 25.0  # INCREASED: Better filtering (was 18.0)
+    confidence_threshold: 20.0  # BALANCED: Moderate filtering (was 18.0, tried 25.0)
     max_hold_time_minutes: 480
-    stop_loss_pct: 1.2         # Wider stop (was 1.0) - momentum needs room
-    take_profit_pct: 0.75      # Higher target (was 0.60) - momentum should run
+    stop_loss_pct: 1.2         # Wider stop - momentum needs room
+    take_profit_pct: 0.65      # Balanced target (was 0.60, tried 0.75)
 
 api:
   max_retries: 3
@@ -83,6 +88,11 @@ slippage:
   BNBUSDT: 0.0003   # 0.03%
   SOLUSDT: 0.0004   # 0.04%
   XRPUSDT: 0.0004   # 0.04%
+  ADAUSDT: 0.0004   # 0.04% - good liquidity
+  DOGEUSDT: 0.0004  # 0.04% - high volume
+  MATICUSDT: 0.0004 # 0.04% - good liquidity
+  DOTUSDT: 0.0004   # 0.04% - stable
+  AVAXUSDT: 0.0004  # 0.04% - good opportunities
   default: 0.0005   # 0.05% for others
 
 logging:

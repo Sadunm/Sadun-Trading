@@ -31,18 +31,18 @@ class DayTradingStrategy(BaseStrategy):
             bb_upper = indicators.get('bb_upper', price)
             bb_lower = indicators.get('bb_lower', price)
             
-            # IMPROVED: Stricter volume filter - avoid low-volume trades
-            if volume_ratio < 1.2:  # Increased from 1.0
+            # BALANCED: Volume filter - avoid very low volume but allow moderate
+            if volume_ratio < 1.1:  # Balanced: was 1.0, tried 1.2, balanced at 1.1
                 return None
             
-            # IMPROVED: BUY signal - stricter EMA crossover + stronger RSI
-            if ema_9 > ema_21 and macd_hist > 0.001:  # MACD clearly positive (was just >0)
-                # Stricter: RSI should be more oversold, price closer to lower BB
-                if rsi < 45 and price <= bb_lower * 1.015:  # RSI <45 (was 50), closer to BB (was 1.02)
-                    # Additional momentum check
+            # BALANCED: BUY signal - good conditions but not overly strict
+            if ema_9 > ema_21 and macd_hist > 0:  # Balanced: MACD positive (was >0, tried >0.001)
+                # Balanced: RSI oversold but not too strict, price near lower BB
+                if rsi < 48 and price <= bb_lower * 1.02:  # RSI <48 (was 50, tried 45), BB tolerance (was 1.02, tried 1.015)
+                    # Momentum check (more flexible)
                     momentum_3 = indicators.get('momentum_3', 0.0)
-                    if momentum_3 > 0:  # Positive momentum
-                        confidence = self.calculate_confidence(indicators, 'BUY', 28.0)  # Higher base (was 25.0)
+                    if momentum_3 > -0.05:  # Allow slightly negative momentum (was >0)
+                        confidence = self.calculate_confidence(indicators, 'BUY', 25.0)  # Balanced base (was 25.0, tried 28.0)
                         if confidence >= self.confidence_threshold:
                             logger.info(f"[OK] {symbol} DAY TRADING BUY: RSI={rsi:.1f}, EMA9>EMA21, Conf={confidence:.1f}%")
                             return {
@@ -51,14 +51,14 @@ class DayTradingStrategy(BaseStrategy):
                                 'reason': 'Day Trading Strong Uptrend Oversold'
                             }
             
-            # IMPROVED: SELL signal - stricter EMA crossover + stronger RSI
-            if ema_9 < ema_21 and macd_hist < -0.001:  # MACD clearly negative (was just <0)
-                # Stricter: RSI should be more overbought, price closer to upper BB
-                if rsi > 55 and price >= bb_upper * 0.985:  # RSI >55 (was 50), closer to BB (was 0.98)
-                    # Additional momentum check
+            # BALANCED: SELL signal - good conditions but not overly strict
+            if ema_9 < ema_21 and macd_hist < 0:  # Balanced: MACD negative (was <0, tried <-0.001)
+                # Balanced: RSI overbought but not too strict, price near upper BB
+                if rsi > 52 and price >= bb_upper * 0.98:  # RSI >52 (was 50, tried 55), BB tolerance (was 0.98, tried 0.985)
+                    # Momentum check (more flexible)
                     momentum_3 = indicators.get('momentum_3', 0.0)
-                    if momentum_3 < 0:  # Negative momentum
-                        confidence = self.calculate_confidence(indicators, 'SELL', 28.0)  # Higher base (was 25.0)
+                    if momentum_3 < 0.05:  # Allow slightly positive momentum (was <0)
+                        confidence = self.calculate_confidence(indicators, 'SELL', 25.0)  # Balanced base (was 25.0, tried 28.0)
                         if confidence >= self.confidence_threshold:
                             logger.info(f"[OK] {symbol} DAY TRADING SELL: RSI={rsi:.1f}, EMA9<EMA21, Conf={confidence:.1f}%")
                             return {
