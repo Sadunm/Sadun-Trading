@@ -13,6 +13,7 @@ from core.risk_manager import RiskManager
 from core.state_manager import StateManager
 from core.fee_calculator import FeeCalculator
 from core.slippage_simulator import SlippageSimulator, SpreadSimulator
+from core.safety_manager import SafetyManager
 from core.compound_manager import CompoundManager
 from core.real_time_monitor import RealTimePriceMonitor
 from data.market_data import MarketData
@@ -104,6 +105,9 @@ class TradingBot:
         self.risk_manager = RiskManager(risk_config)
         self.state_manager = StateManager()
         self.trade_storage = TradeStorage()
+        
+        # Safety manager for kill-switch, ping test, fee guard, etc.
+        self.safety_manager = SafetyManager(risk_config)
         
         # Auto compounding
         self.compound_manager = CompoundManager(trading_config)
