@@ -1,4 +1,5 @@
 trading:
+  exchange: "bybit"          # "bybit" (0.055% fees) or "binance" (0.1% fees)
   testnet: true              # Use testnet (true) or production (false)
   trading_type: "spot"       # "spot" or "futures"
   use_maker_orders: false   # true for limit orders, false for market orders

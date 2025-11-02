@@ -7,6 +7,7 @@ from queue import Empty
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from core.api_client import BinanceAPIClient
+from core.exchanges.bybit_client import BybitClient
 from core.position_manager import PositionManager
 from core.risk_manager import RiskManager
 from core.state_manager import StateManager
@@ -46,38 +47,58 @@ class TradingBot:
         risk_config = self.config.get_risk_config()
         
         # Trading mode
+        self.exchange_name = trading_config.get('exchange', 'bybit').lower()  # Bybit by default (lower fees)
         self.paper_trading = trading_config.get('paper_trading', True)  # Default: paper trading
         self.trading_type = trading_config.get('trading_type', 'spot')
         self.use_maker_orders = trading_config.get('use_maker_orders', False)
+        testnet = trading_config.get('testnet', True)
+        max_retries = self.config.get_api_config().get('max_retries', 3)
         
-        # Initialize API client(s) - STRATEGY-1: Round-robin support
-        self.api_rotator = None
-        if api_keys_list and len(api_keys_list) > 1:
-            # Multiple keys: Use round-robin
-            from core.api_rotator import APIRotator
-            self.api_rotator = APIRotator(api_keys_list, testnet=trading_config.get('testnet', True))
-            self.api_client = self.api_rotator.get_client()  # Get primary client
-            logger.info(f"[API] Round-robin enabled with {len(api_keys_list)} keys")
-        else:
-            # Single key: Use direct client
-            self.api_client = BinanceAPIClient(
+        # Initialize API client based on exchange
+        if self.exchange_name == 'bybit':
+            # Bybit (0.055% fees - LOWER!)
+            self.api_rotator = None
+            if api_keys_list and len(api_keys_list) > 1:
+                # Multiple keys: Use round-robin (but Bybit doesn't support multi-key easily)
+                # For now, use first key
+                logger.warning("[API] Bybit: Using first key only (multi-key rotation not fully supported)")
+            
+            self.api_client = BybitClient(
                 api_key=api_key,
                 secret_key=secret_key,
-                testnet=trading_config.get('testnet', True),
-                max_retries=self.config.get_api_config().get('max_retries', 3)
+                testnet=testnet,
+                max_retries=max_retries
             )
-            logger.info("[API] Single API key mode")
+            logger.info(f"[API] Bybit client initialized (testnet={testnet}, fees: 0.055% maker, 0.075% taker)")
+        else:
+            # Binance (0.1% fees - fallback)
+            self.api_rotator = None
+            if api_keys_list and len(api_keys_list) > 1:
+                # Multiple keys: Use round-robin
+                from core.api_rotator import APIRotator
+                self.api_rotator = APIRotator(api_keys_list, testnet=testnet)
+                self.api_client = self.api_rotator.get_client()  # Get primary client
+                logger.info(f"[API] Binance round-robin enabled with {len(api_keys_list)} keys")
+            else:
+                # Single key: Use direct client
+                self.api_client = BinanceAPIClient(
+                    api_key=api_key,
+                    secret_key=secret_key,
+                    testnet=testnet,
+                    max_retries=max_retries
+                )
+                logger.info("[API] Binance single API key mode")
         
         self.market_data = MarketData(
             api_client=self.api_client,
             cache_duration=self.config.get_api_config().get('cache_duration', 5)
         )
         
-        # Fee and cost calculators
-        self.fee_calculator = FeeCalculator(self.trading_type, self.use_maker_orders)
+        # Fee and cost calculators (with exchange-specific fees)
+        self.fee_calculator = FeeCalculator(self.trading_type, self.use_maker_orders, exchange=self.exchange_name)
         self.slippage_simulator = SlippageSimulator()
         self.spread_simulator = SpreadSimulator()
-        self.profit_calculator = ProfitCalculator(self.trading_type, self.use_maker_orders)
+        self.profit_calculator = ProfitCalculator(self.trading_type, self.use_maker_orders, exchange=self.exchange_name)
         
         self.position_manager = PositionManager()
         self.risk_manager = RiskManager(risk_config)
@@ -530,11 +551,13 @@ class TradingBot:
                 client = self.api_rotator.get_client() if self.api_rotator else self.api_client
                 
                 exit_action = 'SELL' if position.action == 'BUY' else 'BUY'
+                order_type = 'Market' if self.exchange_name == 'bybit' else 'MARKET'
+                
                 order_result = client.place_order(
                     symbol=symbol,
                     side=exit_action,
                     quantity=position.quantity,  # Close full remaining quantity
-                    order_type='MARKET'
+                    order_type=order_type
                 )
                 
                 if not order_result:
@@ -660,11 +683,13 @@ class TradingBot:
                 client = self.api_rotator.get_client() if self.api_rotator else self.api_client
                 
                 exit_action = 'SELL' if position.action == 'BUY' else 'BUY'
+                order_type = 'Market' if self.exchange_name == 'bybit' else 'MARKET'
+                
                 order_result = client.place_order(
                     symbol=symbol,
                     side=exit_action,
                     quantity=close_quantity,  # Partial quantity (50% by default)
-                    order_type='MARKET'
+                    order_type=order_type
                 )
                 
                 if not order_result:

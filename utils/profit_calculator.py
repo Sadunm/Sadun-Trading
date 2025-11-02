@@ -13,8 +13,9 @@ logger = setup_logger("profit_calculator")
 class ProfitCalculator:
     """Calculate ACTUAL profit after all costs"""
     
-    def __init__(self, trading_type: str = 'spot', use_maker: bool = False):
-        self.fee_calc = FeeCalculator(trading_type, use_maker)
+    def __init__(self, trading_type: str = 'spot', use_maker: bool = False, exchange: str = 'bybit'):
+        self.exchange = exchange
+        self.fee_calc = FeeCalculator(trading_type, use_maker, exchange=exchange)
         self.slippage_sim = SlippageSimulator()
         self.spread_sim = SpreadSimulator()
         self.trading_type = trading_type
