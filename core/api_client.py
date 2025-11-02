@@ -263,11 +263,27 @@ class BinanceAPIClient:
             
             order_data = response.json()
             
-            logger.info(f"[OK] Order placed: {side} {quantity} {symbol} @ {order_type}")
-            if order_type == 'MARKET':
-                logger.info(f"[ORDER] Market order executed - Fill details in response")
+            # For MARKET orders, Binance may return 'fills' array with actual fill prices
+            # Extract average fill price if available
+            if order_type == 'MARKET' and 'fills' in order_data and len(order_data['fills']) > 0:
+                total_qty = 0.0
+                total_cost = 0.0
+                for fill in order_data['fills']:
+                    fill_qty = float(fill.get('qty', 0))
+                    fill_price = float(fill.get('price', 0))
+                    total_qty += fill_qty
+                    total_cost += fill_qty * fill_price
+                
+                if total_qty > 0:
+                    avg_price = total_cost / total_qty
+                    order_data['avg_fill_price'] = avg_price
+                    logger.info(f"[OK] Market order filled: {side} {quantity} {symbol} @ avg ${avg_price:.2f}")
+                else:
+                    logger.info(f"[OK] Market order placed: {side} {quantity} {symbol}")
             else:
-                logger.info(f"[ORDER] Limit order placed @ ${price}")
+                logger.info(f"[OK] Order placed: {side} {quantity} {symbol} @ {order_type}")
+                if order_type == 'LIMIT':
+                    logger.info(f"[ORDER] Limit order placed @ ${price}")
             
             return order_data
             

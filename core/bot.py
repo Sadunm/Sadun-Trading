@@ -397,9 +397,10 @@ class TradingBot:
                     logger.error(f"[ERROR] Failed to place order for {symbol}")
                     return
                 
-                # Get actual filled price from order (might differ from our calculation)
-                filled_price = float(order_result.get('price', actual_entry_price))
-                if filled_price != actual_entry_price:
+                # Get actual filled price from order response
+                # Binance market orders return 'avg_fill_price' or 'fills' array
+                filled_price = order_result.get('avg_fill_price') or float(order_result.get('price', actual_entry_price))
+                if filled_price and filled_price != actual_entry_price:
                     logger.info(f"[ORDER] Actual fill price: ${filled_price:.2f} (estimated: ${actual_entry_price:.2f})")
                     actual_entry_price = filled_price  # Use actual fill price
             
@@ -478,9 +479,9 @@ class TradingBot:
                     logger.error(f"[ERROR] Failed to place exit order for {symbol}")
                     return
                 
-                # Get actual filled price
-                filled_price = float(order_result.get('price', actual_exit_price))
-                if filled_price != actual_exit_price:
+                # Get actual filled price from order response
+                filled_price = order_result.get('avg_fill_price') or float(order_result.get('price', actual_exit_price))
+                if filled_price and filled_price != actual_exit_price:
                     logger.info(f"[ORDER] Actual exit fill: ${filled_price:.2f} (estimated: ${actual_exit_price:.2f})")
                     actual_exit_price = filled_price
             
@@ -602,9 +603,9 @@ class TradingBot:
                     logger.error(f"[ERROR] Failed to place partial close order for {symbol}")
                     return
                 
-                # Get actual filled price
-                filled_price = float(order_result.get('price', actual_exit_price))
-                if filled_price != actual_exit_price:
+                # Get actual filled price from order response
+                filled_price = order_result.get('avg_fill_price') or float(order_result.get('price', actual_exit_price))
+                if filled_price and filled_price != actual_exit_price:
                     logger.info(f"[ORDER] Actual partial fill: ${filled_price:.2f} (estimated: ${actual_exit_price:.2f})")
                     actual_exit_price = filled_price
             
