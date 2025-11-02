@@ -502,6 +502,7 @@ class TradingBot:
                 logger.info(f"[COSTS] Entry price adjusted: ${price:.2f} -> ${actual_entry_price:.2f} (slippage + spread)")
                 
                 # Get partial profit taking config
+                trading_config = self.config.get_trading_config()
                 partial_profit_enabled = trading_config.get('partial_profit_taking', True)
                 
                 # Micro-scalp: NO partial close (inefficient for $10 capital)
