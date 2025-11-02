@@ -44,24 +44,24 @@ risk:
 strategies:
   scalping:
     enabled: true
-    confidence_threshold: 15.0
+    confidence_threshold: 25.0  # INCREASED: Only take strong signals (was 15.0)
     max_hold_time_minutes: 180
-    stop_loss_pct: 0.30        # Tight stop loss
-    take_profit_pct: 0.50      # Will be adjusted to min 0.40% by bot
+    stop_loss_pct: 0.35        # Slightly wider stop (was 0.30) - reduce false stops
+    take_profit_pct: 0.55      # Slightly higher target for better R:R (was 0.50)
   
   day_trading:
     enabled: true
-    confidence_threshold: 20.0
+    confidence_threshold: 28.0  # INCREASED: Strong signals only (was 20.0)
     max_hold_time_minutes: 1440
-    stop_loss_pct: 0.80        # Medium stop loss
-    take_profit_pct: 0.50      # Will be adjusted to min 0.40% by bot
+    stop_loss_pct: 0.85        # Slightly wider (was 0.80) - let winners run
+    take_profit_pct: 0.65      # Higher target for better profits (was 0.50)
   
   momentum:
     enabled: true
-    confidence_threshold: 18.0
+    confidence_threshold: 25.0  # INCREASED: Better filtering (was 18.0)
     max_hold_time_minutes: 480
-    stop_loss_pct: 1.0         # Wider stop loss
-    take_profit_pct: 0.60      # Higher target, will be adjusted if needed
+    stop_loss_pct: 1.2         # Wider stop (was 1.0) - momentum needs room
+    take_profit_pct: 0.75      # Higher target (was 0.60) - momentum should run
 
 api:
   max_retries: 3

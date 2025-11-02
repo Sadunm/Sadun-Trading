@@ -28,35 +28,41 @@ class ScalpingStrategy(BaseStrategy):
             momentum_3 = indicators.get('momentum_3', 0.0)
             atr_pct = indicators.get('atr_pct', 0.0)
             
-            # Volume filter
-            if volume_ratio < 1.2:
+            # IMPROVED: Stricter volume filter - need above-average volume
+            if volume_ratio < 1.3:  # Increased from 1.2
                 return None
             
-            # ATR filter - need some volatility
-            if atr_pct < 0.5:
+            # IMPROVED: ATR filter - need adequate volatility for scalping
+            if atr_pct < 0.6:  # Increased from 0.5 for better opportunities
                 return None
             
-            # BUY signal - oversold bounce
-            if rsi < 45 and momentum_3 > 0.1:
-                confidence = self.calculate_confidence(indicators, 'BUY', 20.0)
-                if confidence >= self.confidence_threshold:
-                    logger.info(f"[OK] {symbol} SCALPING BUY: RSI={rsi:.1f}, Conf={confidence:.1f}%")
-                    return {
-                        'action': 'BUY',
-                        'confidence': confidence,
-                        'reason': 'Scalping Oversold Bounce'
-                    }
+            # IMPROVED: BUY signal - more selective oversold bounce
+            if rsi < 40 and momentum_3 > 0.15:  # Stricter: RSI <40 (was 45), momentum >0.15 (was 0.1)
+                macd_hist = indicators.get('macd_hist', 0.0)
+                # Additional filter: MACD should be positive or turning positive
+                if macd_hist > -0.001:  # MACD not strongly negative
+                    confidence = self.calculate_confidence(indicators, 'BUY', 22.0)  # Higher base
+                    if confidence >= self.confidence_threshold:
+                        logger.info(f"[OK] {symbol} SCALPING BUY: RSI={rsi:.1f}, Mom={momentum_3:.2f}, Conf={confidence:.1f}%")
+                        return {
+                            'action': 'BUY',
+                            'confidence': confidence,
+                            'reason': 'Scalping Strong Oversold Bounce'
+                        }
             
-            # SELL signal - overbought pullback
-            if rsi > 55 and momentum_3 < -0.1:
-                confidence = self.calculate_confidence(indicators, 'SELL', 20.0)
-                if confidence >= self.confidence_threshold:
-                    logger.info(f"[OK] {symbol} SCALPING SELL: RSI={rsi:.1f}, Conf={confidence:.1f}%")
-                    return {
-                        'action': 'SELL',
-                        'confidence': confidence,
-                        'reason': 'Scalping Overbought Pullback'
-                    }
+            # IMPROVED: SELL signal - more selective overbought pullback
+            if rsi > 60 and momentum_3 < -0.15:  # Stricter: RSI >60 (was 55), momentum <-0.15 (was -0.1)
+                macd_hist = indicators.get('macd_hist', 0.0)
+                # Additional filter: MACD should be negative or turning negative
+                if macd_hist < 0.001:  # MACD not strongly positive
+                    confidence = self.calculate_confidence(indicators, 'SELL', 22.0)  # Higher base
+                    if confidence >= self.confidence_threshold:
+                        logger.info(f"[OK] {symbol} SCALPING SELL: RSI={rsi:.1f}, Mom={momentum_3:.2f}, Conf={confidence:.1f}%")
+                        return {
+                            'action': 'SELL',
+                            'confidence': confidence,
+                            'reason': 'Scalping Strong Overbought Pullback'
+                        }
             
             return None
             

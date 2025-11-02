@@ -31,33 +31,41 @@ class DayTradingStrategy(BaseStrategy):
             bb_upper = indicators.get('bb_upper', price)
             bb_lower = indicators.get('bb_lower', price)
             
-            # Volume filter
-            if volume_ratio < 1.0:
+            # IMPROVED: Stricter volume filter - avoid low-volume trades
+            if volume_ratio < 1.2:  # Increased from 1.0
                 return None
             
-            # BUY signal - EMA crossover + RSI oversold
-            if ema_9 > ema_21 and macd_hist > 0:
-                if rsi < 50 and price <= bb_lower * 1.02:  # Near lower BB
-                    confidence = self.calculate_confidence(indicators, 'BUY', 25.0)
-                    if confidence >= self.confidence_threshold:
-                        logger.info(f"[OK] {symbol} DAY TRADING BUY: RSI={rsi:.1f}, Conf={confidence:.1f}%")
-                        return {
-                            'action': 'BUY',
-                            'confidence': confidence,
-                            'reason': 'Day Trading Uptrend Oversold'
-                        }
+            # IMPROVED: BUY signal - stricter EMA crossover + stronger RSI
+            if ema_9 > ema_21 and macd_hist > 0.001:  # MACD clearly positive (was just >0)
+                # Stricter: RSI should be more oversold, price closer to lower BB
+                if rsi < 45 and price <= bb_lower * 1.015:  # RSI <45 (was 50), closer to BB (was 1.02)
+                    # Additional momentum check
+                    momentum_3 = indicators.get('momentum_3', 0.0)
+                    if momentum_3 > 0:  # Positive momentum
+                        confidence = self.calculate_confidence(indicators, 'BUY', 28.0)  # Higher base (was 25.0)
+                        if confidence >= self.confidence_threshold:
+                            logger.info(f"[OK] {symbol} DAY TRADING BUY: RSI={rsi:.1f}, EMA9>EMA21, Conf={confidence:.1f}%")
+                            return {
+                                'action': 'BUY',
+                                'confidence': confidence,
+                                'reason': 'Day Trading Strong Uptrend Oversold'
+                            }
             
-            # SELL signal - EMA crossover + RSI overbought
-            if ema_9 < ema_21 and macd_hist < 0:
-                if rsi > 50 and price >= bb_upper * 0.98:  # Near upper BB
-                    confidence = self.calculate_confidence(indicators, 'SELL', 25.0)
-                    if confidence >= self.confidence_threshold:
-                        logger.info(f"[OK] {symbol} DAY TRADING SELL: RSI={rsi:.1f}, Conf={confidence:.1f}%")
-                        return {
-                            'action': 'SELL',
-                            'confidence': confidence,
-                            'reason': 'Day Trading Downtrend Overbought'
-                        }
+            # IMPROVED: SELL signal - stricter EMA crossover + stronger RSI
+            if ema_9 < ema_21 and macd_hist < -0.001:  # MACD clearly negative (was just <0)
+                # Stricter: RSI should be more overbought, price closer to upper BB
+                if rsi > 55 and price >= bb_upper * 0.985:  # RSI >55 (was 50), closer to BB (was 0.98)
+                    # Additional momentum check
+                    momentum_3 = indicators.get('momentum_3', 0.0)
+                    if momentum_3 < 0:  # Negative momentum
+                        confidence = self.calculate_confidence(indicators, 'SELL', 28.0)  # Higher base (was 25.0)
+                        if confidence >= self.confidence_threshold:
+                            logger.info(f"[OK] {symbol} DAY TRADING SELL: RSI={rsi:.1f}, EMA9<EMA21, Conf={confidence:.1f}%")
+                            return {
+                                'action': 'SELL',
+                                'confidence': confidence,
+                                'reason': 'Day Trading Strong Downtrend Overbought'
+                            }
             
             return None
             
