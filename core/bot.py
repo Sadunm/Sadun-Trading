@@ -384,17 +384,37 @@ class TradingBot:
                 logger.warning(f"[WARN] Invalid stop loss/take profit for {symbol}: {error}")
                 return
             
-            # Open position
+            # LIVE TRADING: Place actual order on Binance
+            if not self.paper_trading:
+                order_result = self.api_client.place_order(
+                    symbol=symbol,
+                    side=signal['action'],
+                    quantity=quantity,
+                    order_type='MARKET'  # Market order for immediate execution
+                )
+                
+                if not order_result:
+                    logger.error(f"[ERROR] Failed to place order for {symbol}")
+                    return
+                
+                # Get actual filled price from order (might differ from our calculation)
+                filled_price = float(order_result.get('price', actual_entry_price))
+                if filled_price != actual_entry_price:
+                    logger.info(f"[ORDER] Actual fill price: ${filled_price:.2f} (estimated: ${actual_entry_price:.2f})")
+                    actual_entry_price = filled_price  # Use actual fill price
+            
+            # Open position (paper trading = track only, live trading = track after API order)
             if self.position_manager.open_position(
                 symbol=symbol,
                 strategy=strategy_name,
                 action=signal['action'],
-                entry_price=actual_entry_price,  # Use actual price with slippage/spread
+                entry_price=actual_entry_price,  # Use actual price (with slippage/spread or API fill)
                 quantity=quantity,
                 stop_loss=stop_loss,
                 take_profit=take_profit
             ):
-                logger.info(f"[OK] Opened {signal['action']} position: {symbol} @ ${actual_entry_price:.2f} qty={quantity:.6f}")
+                mode = "LIVE" if not self.paper_trading else "PAPER"
+                logger.info(f"[{mode}] Opened {signal['action']} position: {symbol} @ ${actual_entry_price:.2f} qty={quantity:.6f}")
                 logger.info(f"[COSTS] Entry price adjusted: ${price:.2f} -> ${actual_entry_price:.2f} (slippage + spread)")
                 
                 # Get partial profit taking config
