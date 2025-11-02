@@ -455,13 +455,16 @@ class TradingBot:
                 logger.warning(f"[WARN] Invalid stop loss/take profit for {symbol}: {error}")
                 return
             
-            # LIVE TRADING: Place actual order on Binance
+            # LIVE TRADING: Place actual order (Bybit/Binance)
             if not self.paper_trading:
+                # Bybit uses 'Market', Binance uses 'MARKET'
+                order_type = 'Market' if self.exchange_name == 'bybit' else 'MARKET'
+                
                 order_result = self.api_client.place_order(
                     symbol=symbol,
                     side=signal['action'],
                     quantity=quantity,
-                    order_type='MARKET'  # Market order for immediate execution
+                    order_type=order_type  # Market order for immediate execution
                 )
                 
                 if not order_result:
