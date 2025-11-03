@@ -139,7 +139,7 @@ class RiskManager:
             action: 'BUY' or 'SELL'
             custom_pct: Custom stop loss percentage
             add_buffer: Add buffer for exit slippage/spread (default: True)
-                       Buffer: ~0.12% for spread + slippage on exit (INCREASED)
+                       Buffer: ~0.15% for spread + slippage on exit (INCREASED - accounts for real losses)
         """
         try:
             if not validate_price(entry_price):
@@ -149,7 +149,7 @@ class RiskManager:
             
             # Add buffer for exit slippage/spread to prevent instant stop loss hits
             # Exit will also have slippage/spread, so we need extra room
-            buffer_pct = 0.12 if add_buffer else 0.0  # INCREASED: ~0.05% spread + ~0.07% slippage (was 0.08%)
+            buffer_pct = 0.15 if add_buffer else 0.0  # INCREASED: ~0.06% spread + ~0.09% slippage (was 0.12%)
             effective_sl_pct = stop_loss_pct + buffer_pct
             
             if action.upper() == 'BUY':
