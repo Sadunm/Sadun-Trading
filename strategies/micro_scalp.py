@@ -161,8 +161,8 @@ class MicroScalpStrategy(BaseStrategy):
         rsi_distance = abs(rsi - rsi_center)
         rsi_bonus = max(0, 10 - rsi_distance)  # Max +10 if RSI = 50
         
-        # Volume bonus (higher volume = better) - optimized for new 1.3x threshold
-        volume_bonus = min(10, (volume_ratio - 1.3) * 10)  # Max +10 (base is now 1.3x)
+        # Volume bonus (higher volume = better) - optimized for 1.2x threshold
+        volume_bonus = min(10, max(0, (volume_ratio - 1.2) * 10))  # Max +10 (base is now 1.2x), min 0
         
         # Volatility bonus (moderate volatility is good)
         volatility_bonus = min(5, max(0, (atr_pct - 0.15) * 20))  # Max +5
