@@ -27,12 +27,12 @@ class MicroScalpStrategy(BaseStrategy):
         self.stop_loss_pct = config.get('stop_loss_pct', 0.70)  # -0.70% stop loss (INCREASED from 0.55% - actual losses were 0.50-0.59%)
         self.take_profit_pct = config.get('take_profit_pct', 1.20)  # +1.20% target (INCREASED from 1.10% to compensate)
         
-        # Entry filters (ULTRA-STRICT to prevent losses - only highest quality trades)
-        self.min_volatility_pct = 0.18  # INCREASED: Volatility > 0.18% (was 0.15%) - need even stronger moves
-        self.rsi_min = 40  # TIGHTENED: RSI between 40-50 (was 38-52) - more precise neutral entries
-        self.rsi_max = 50
-        self.volume_spike_ratio = 1.3  # INCREASED: Volume ≥ 1.3x average (was 1.2x) - need stronger momentum
-        self.max_spread_pct = 0.025  # TIGHTENED: Spread < 0.025% (was 0.03%) - even lower costs
+        # Entry filters (BALANCED - quality trades but allow some opportunities)
+        self.min_volatility_pct = 0.15  # BALANCED: Volatility > 0.15% (was 0.18% - too strict, reduced for testnet)
+        self.rsi_min = 38  # BALANCED: RSI between 38-52 (was 40-50 - too narrow, widened for more opportunities)
+        self.rsi_max = 52
+        self.volume_spike_ratio = 1.2  # BALANCED: Volume ≥ 1.2x average (was 1.3x - too strict, reduced for testnet)
+        self.max_spread_pct = 0.03  # BALANCED: Spread < 0.03% (was 0.025% - too tight, relaxed for testnet)
         
         # Exit enhancements (OPTIMIZED for safe profits - proven techniques)
         self.trailing_start_pct = 0.50  # Start trailing when profit > +0.50% (let winners run)
@@ -67,24 +67,55 @@ class MicroScalpStrategy(BaseStrategy):
             ema_21 = indicators.get('ema_21', price)
             ema_cross = ema_9 > ema_21  # Bullish crossover
             
-            # FILTER 1: Volatility check (STRICT - need strong moves)
+            # FILTER 1: Volatility check (BALANCED - need moderate moves but not too strict)
             if atr_pct < self.min_volatility_pct:
+                # Log filter failures (occasionally to avoid spam)
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_vol", 0)
+                self._filter_log_count[f"{symbol}_vol"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: ATR={atr_pct:.3f}% < {self.min_volatility_pct:.2f}% threshold")
                 return None
             
-            # FILTER 2: RSI check (TIGHTENED range for precise entries)
+            # FILTER 2: RSI check (BALANCED - wider range for more opportunities)
             if rsi < self.rsi_min or rsi > self.rsi_max:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_rsi", 0)
+                self._filter_log_count[f"{symbol}_rsi"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: RSI={rsi:.1f} not in [{self.rsi_min}-{self.rsi_max}] zone")
                 return None
             
-            # FILTER 3: Volume check (STRICT - need strong momentum)
+            # FILTER 3: Volume check (BALANCED - need momentum but not extreme)
             if volume_ratio < self.volume_spike_ratio:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_vol", 0)
+                self._filter_log_count[f"{symbol}_vol"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Volume={volume_ratio:.2f}x < {self.volume_spike_ratio:.1f}x threshold")
                 return None
             
-            # FILTER 4: Spread check (TIGHTENED - lower costs)
+            # FILTER 4: Spread check (BALANCED - reasonable costs)
             if spread_pct > self.max_spread_pct:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_spread", 0)
+                self._filter_log_count[f"{symbol}_spread"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Spread={spread_pct:.3f}% > {self.max_spread_pct:.3f}% threshold")
                 return None
             
             # FILTER 5: EMA crossover (must be bullish)
             if not ema_cross:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_ema", 0)
+                self._filter_log_count[f"{symbol}_ema"] = count + 1
+                if count % 50 == 0:
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: EMA crossover not bullish (EMA9={ema_9:.2f}, EMA21={ema_21:.2f})")
                 return None
             
             # Calculate confidence
@@ -92,6 +123,12 @@ class MicroScalpStrategy(BaseStrategy):
             
             # Only take high confidence signals
             if confidence < self.confidence_threshold:
+                if not hasattr(self, '_filter_log_count'):
+                    self._filter_log_count = {}
+                count = self._filter_log_count.get(f"{symbol}_conf", 0)
+                self._filter_log_count[f"{symbol}_conf"] = count + 1
+                if count % 20 == 0:  # Log confidence failures more often (every 20th)
+                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Confidence={confidence:.1f}% < {self.confidence_threshold:.1f}% threshold")
                 return None
             
             # Determine action

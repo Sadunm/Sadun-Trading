@@ -121,3 +121,4 @@ If win rate stays below 40%:
 **My Recommendation**: 
 Run for 24-48 hours, monitor win rate. If it stays below 40%, we'll tighten filters further or adjust strategy.
 
+
