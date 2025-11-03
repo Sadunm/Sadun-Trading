@@ -1,8 +1,8 @@
 trading:
-  exchange: "binance"        # "binance" (0.1% fees, default) or "bybit" (0.055% fees - when API keys ready)
-  testnet: true              # Use testnet (true) or production (false)
+  exchange: "bybit"          # "bybit" (0.055% maker, 0.075% taker - LOWER fees) or "binance" (0.1%)
+  testnet: true              # Use testnet (true) or production (false) - MUST use testnet for paper trading
   trading_type: "spot"       # "spot" or "futures"
-  use_maker_orders: false   # true for limit orders, false for market orders
+  use_maker_orders: false   # true for limit orders, false for market orders (market = taker fee 0.075%)
   initial_capital: 10.0     # Starting capital in USDT
   paper_trading: true        # Paper trading mode
   symbols:                   # STRATEGY-1: 20 coins (10 primary + 10 secondary)
@@ -42,8 +42,8 @@ trading:
   partial_profit_taking: true  # Enable partial close when fees covered
   partial_close_pct: 50.0  # Close 50% when fees covered (remaining waits for target/neutral)
   
-  # Minimum profit targets (after all fees)
-  min_take_profit_pct: 0.40   # Spot: 0.40% minimum (covers 0.20% fees + 0.20% profit)
+  # Minimum profit targets (after all fees - Bybit: lower fees = lower minimum)
+  min_take_profit_pct: 0.35   # Spot: 0.35% minimum (Bybit: 0.13% fees + 0.05% slippage/spread + 0.17% profit)
   min_take_profit_futures_pct: 0.25  # Futures: 0.25% minimum
   
   # Auto Compounding
@@ -98,10 +98,10 @@ api:
   timeout: 10
   cache_duration: 5
 
-# Fee settings (MUST match Binance exactly for live matching)
+# Fee settings (MUST match Bybit exactly for live matching)
 fees:
-  spot_maker: 0.001   # 0.1%
-  spot_taker: 0.001   # 0.1%
+  spot_maker: 0.00055  # 0.055% - Bybit maker fee (lower than Binance 0.1%)
+  spot_taker: 0.00075  # 0.075% - Bybit taker fee (lower than Binance 0.1%)
   futures_maker: 0.0002  # 0.02%
   futures_taker: 0.0004  # 0.04%
 

@@ -1,5 +1,6 @@
 """
-Real Binance fee calculation - EXACT match to live trading
+Real Bybit/Binance fee calculation - EXACT match to live trading
+Default: Bybit (0.055% maker, 0.075% taker - LOWER fees)
 """
 from typing import Dict, Any
 from utils.validators import validate_price, safe_divide
@@ -9,7 +10,7 @@ logger = setup_logger("fee_calculator")
 
 
 class FeeCalculator:
-    """Calculate REAL Binance fees - EXACT match to live trading"""
+    """Calculate REAL Bybit/Binance fees - EXACT match to live trading (Default: Bybit - lower fees)"""
     
     # Exchange fees (updated for Bybit)
     # Bybit Fees (2024-2025) - LOWER than Binance!
@@ -87,18 +88,21 @@ class FeeCalculator:
             round_trip_fee_pct = self.calculate_round_trip_fee(100.0) / 100.0
             
             # Additional costs
-            slippage_pct = 0.0003  # 0.03% average
+            slippage_pct = 0.0003  # 0.03% average (Bybit has slightly better liquidity = similar slippage)
             spread_pct = 0.0005 if self.trading_type == 'spot' else 0.0004  # 0.05% or 0.04%
             
             # Minimum profit margin
-            profit_margin_pct = 0.0015  # 0.15% minimum profit
+            profit_margin_pct = 0.0017  # 0.17% minimum profit (Bybit: lower fees = can aim for slightly higher profit)
             
             # Total minimum
             min_tp_pct = round_trip_fee_pct + slippage_pct + spread_pct + profit_margin_pct
             
-            # For spot, ensure at least 0.40%
+            # For spot, ensure minimum (Bybit: 0.13% fees vs Binance 0.20% fees = lower minimum)
             if self.trading_type == 'spot':
-                min_tp_pct = max(min_tp_pct, 0.0040)  # 0.40% minimum
+                if self.exchange == 'bybit':
+                    min_tp_pct = max(min_tp_pct, 0.0035)  # 0.35% minimum for Bybit (lower fees)
+                else:
+                    min_tp_pct = max(min_tp_pct, 0.0040)  # 0.40% minimum for Binance
             else:  # futures
                 min_tp_pct = max(min_tp_pct, 0.0025)  # 0.25% minimum
             
@@ -106,6 +110,9 @@ class FeeCalculator:
             
         except Exception as e:
             logger.error(f"[ERROR] Error calculating minimum take profit: {e}")
-            # Return safe defaults
-            return 0.40 if self.trading_type == 'spot' else 0.25
+            # Return safe defaults (Bybit: lower fees = lower minimum)
+            if self.trading_type == 'spot':
+                return 0.35 if self.exchange == 'bybit' else 0.40  # Bybit: 0.35%, Binance: 0.40%
+            else:
+                return 0.25
 

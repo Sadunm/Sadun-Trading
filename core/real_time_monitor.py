@@ -112,9 +112,9 @@ class RealTimePriceMonitor:
             # Position value
             position_value = entry_price * quantity
             
-            # Calculate total fees (entry + exit)
+            # Calculate total fees (entry + exit) - Uses Bybit fees (0.13% round trip) or Binance (0.20%)
             round_trip_fee = self.fee_calculator.calculate_round_trip_fee(position_value)
-            fee_pct = (round_trip_fee / position_value) if position_value > 0 else 0.002  # 0.2% default
+            fee_pct = (round_trip_fee / position_value) if position_value > 0 else 0.0013  # Bybit default: 0.13% (0.055%+0.075%)
             
             # Estimate slippage + spread (average)
             slippage_pct = 0.0003  # 0.03%
