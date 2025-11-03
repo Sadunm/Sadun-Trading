@@ -86,11 +86,11 @@ strategies:
     take_profit_pct: 0.65      # Balanced target (was 0.60, tried 0.75)
   
   micro_scalp:
-    enabled: true              # STRATEGY-1: Micro-Scalp Profit System
-    confidence_threshold: 25.0 # Strict entry (precision over frequency)
-    max_hold_time_minutes: 30  # 30 min timeout
-    stop_loss_pct: 0.20        # -0.20% stop loss (was 0.15%, increased to prevent instant hits)
-    take_profit_pct: 0.50      # +0.50% target (was 0.45%, increased for better risk/reward)
+    enabled: true              # STRATEGY-1: Micro-Scalp Profit System (OPTIMIZED for safe profits)
+    confidence_threshold: 28.0 # STRICT entry (higher quality = higher win rate) - proven for small capital
+    max_hold_time_minutes: 25  # 25 min timeout (faster exits = lower risk)
+    stop_loss_pct: 0.25        # -0.25% stop loss (with 0.08% buffer = -0.33% effective) - proven safe for small capital
+    take_profit_pct: 0.70      # +0.70% target (risk/reward 1:2.1) - proven optimal for scalping
 
 api:
   max_retries: 3

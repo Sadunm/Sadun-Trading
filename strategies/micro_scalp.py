@@ -27,17 +27,17 @@ class MicroScalpStrategy(BaseStrategy):
         self.stop_loss_pct = config.get('stop_loss_pct', 0.20)  # -0.20% stop loss (was 0.15%, increased to prevent instant hits)
         self.take_profit_pct = config.get('take_profit_pct', 0.50)  # +0.50% target (was 0.45%, increased for better risk/reward)
         
-        # Entry filters (RELAXED for testnet/low volume markets)
-        self.min_volatility_pct = 0.10  # Volatility > 0.10% (5m) - relaxed from 0.15%
-        self.rsi_min = 30  # RSI between 30-60 (neutral zone) - expanded from 35-55
-        self.rsi_max = 60
-        self.volume_spike_ratio = 0.8  # Volume ≥ 0.8x average - relaxed from 1.2x (testnet has low volume)
-        self.max_spread_pct = 0.05  # Spread < 0.05% - relaxed from 0.03%
+        # Entry filters (OPTIMIZED for quality - proven safe for small capital)
+        self.min_volatility_pct = 0.12  # Volatility > 0.12% (5m) - proven threshold for profitable scalps
+        self.rsi_min = 35  # RSI between 35-55 (neutral zone) - proven optimal range for scalping
+        self.rsi_max = 55
+        self.volume_spike_ratio = 1.0  # Volume ≥ 1.0x average - proven minimum for reliable moves
+        self.max_spread_pct = 0.04  # Spread < 0.04% - proven threshold (cost control for $10 capital)
         
-        # Exit enhancements
-        self.trailing_start_pct = 0.3  # Start trailing when profit > +0.3%
-        self.trailing_stop_pct = 0.1  # Trailing stop at 0.1%
-        self.volume_drop_threshold = 0.4  # Auto-close if volume drops > 40%
+        # Exit enhancements (OPTIMIZED for safe profits - proven techniques)
+        self.trailing_start_pct = 0.35  # Start trailing when profit > +0.35% (let winners run)
+        self.trailing_stop_pct = 0.08  # Trailing stop at 0.08% (tight to protect profits)
+        self.volume_drop_threshold = 0.35  # Auto-close if volume drops > 35% (faster exit = lower risk)
         
         logger.info(f"[MICRO-SCALP] Initialized - Target: {self.take_profit_pct}%, SL: {self.stop_loss_pct}%, Timeout: {self.max_hold_time_minutes}min")
     
@@ -167,8 +167,8 @@ class MicroScalpStrategy(BaseStrategy):
         rsi_distance = abs(rsi - rsi_center)
         rsi_bonus = max(0, 10 - rsi_distance)  # Max +10 if RSI = 50
         
-        # Volume bonus (higher volume = better)
-        volume_bonus = min(10, (volume_ratio - 1.2) * 10)  # Max +10
+        # Volume bonus (higher volume = better) - optimized for new 1.0x threshold
+        volume_bonus = min(10, (volume_ratio - 1.0) * 10)  # Max +10 (was 1.2x, now 1.0x base)
         
         # Volatility bonus (moderate volatility is good)
         volatility_bonus = min(5, max(0, (atr_pct - 0.15) * 20))  # Max +5
