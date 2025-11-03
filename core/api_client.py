@@ -127,7 +127,8 @@ class BinanceAPIClient:
                 return None
             
             data = response.json()
-            price = float(data['price'])
+            # SAFE: Get price with validation
+            price = float(data.get('price', 0.0))
             
             if not validate_price(price):
                 raise ValueError(f"Invalid price: {price}")
@@ -328,7 +329,7 @@ class BinanceAPIClient:
             
             data = response.json()
             for s in data.get('symbols', []):
-                if s['symbol'] == symbol.upper():
+                if s.get('symbol') == symbol.upper():
                     filters = {f['filterType']: f for f in s.get('filters', [])}
                     self.symbol_info_cache[symbol] = {
                         'baseAssetPrecision': s.get('baseAssetPrecision', 8),

@@ -178,10 +178,16 @@ class TradingBot:
                     try:
                         update = self.price_monitor.price_updates.get_nowait()
                         
-                        symbol = update['symbol']
-                        strategy = update['strategy']
-                        signal = update['signal']
-                        current_price = update['current_price']
+                        # SAFE: Get all values with defaults and validation
+                        symbol = update.get('symbol')
+                        strategy = update.get('strategy', 'unknown')
+                        signal = update.get('signal')
+                        current_price = update.get('current_price')
+                        
+                        # Validate required values
+                        if not symbol or not signal or current_price is None:
+                            logger.warning(f"[SKIP] Invalid update data: {update}")
+                            continue
                         
                         if signal == 'TAKE_PROFIT':
                             # IMMEDIATE PROFIT TAKING
@@ -425,12 +431,13 @@ class TradingBot:
             
             # Apply slippage and spread to entry price
             volatility = indicators.get('atr_pct', 0.0) / 100.0  # Convert to 0-1 range
+            action = signal.get('action', 'BUY')  # SAFE: Get action with default
             actual_entry_price = self.slippage_simulator.apply_slippage(
-                symbol, price, signal['action'], volatility
+                symbol, price, action, volatility
             )
             
             # Apply spread
-            if signal['action'] == 'BUY':
+            if action == 'BUY':
                 actual_entry_price = self.spread_simulator.get_ask_price(actual_entry_price, symbol)
             else:  # SELL
                 actual_entry_price = self.spread_simulator.get_bid_price(actual_entry_price, symbol)
@@ -458,13 +465,13 @@ class TradingBot:
             
             stop_loss = self.risk_manager.calculate_stop_loss(
                 entry_price=actual_entry_price,
-                action=signal['action'],
+                action=action,
                 custom_pct=stop_loss_pct
             )
             
             take_profit = self.risk_manager.calculate_take_profit(
                 entry_price=actual_entry_price,
-                action=signal['action'],
+                action=action,
                 custom_pct=take_profit_pct
             )
             
@@ -473,7 +480,7 @@ class TradingBot:
                 entry_price=actual_entry_price,
                 stop_loss=stop_loss,
                 take_profit=take_profit,
-                action=signal['action']
+                action=action
             )
             
             if not valid:
@@ -487,7 +494,7 @@ class TradingBot:
                 
                 order_result = self.api_client.place_order(
                     symbol=symbol,
-                    side=signal['action'],
+                    side=action,
                     quantity=quantity,
                     order_type=order_type  # Market order for immediate execution
                 )
@@ -507,7 +514,7 @@ class TradingBot:
             if self.position_manager.open_position(
                 symbol=symbol,
                 strategy=strategy_name,
-                action=signal['action'],
+                action=action,
                 entry_price=actual_entry_price,  # Use actual price (with slippage/spread or API fill)
                 quantity=quantity,
                 stop_loss=stop_loss,
@@ -519,7 +526,7 @@ class TradingBot:
                     position.entry_volume_ratio = indicators.get('volume_ratio', 1.0)
                 
                 mode = "LIVE" if not self.paper_trading else "PAPER"
-                logger.info(f"[{mode}] Opened {signal['action']} position: {symbol} @ ${actual_entry_price:.2f} qty={quantity:.6f}")
+                logger.info(f"[{mode}] Opened {action} position: {symbol} @ ${actual_entry_price:.2f} qty={quantity:.6f}")
                 logger.info(f"[COSTS] Entry price adjusted: ${price:.2f} -> ${actual_entry_price:.2f} (slippage + spread)")
                 
                 # Get partial profit taking config
@@ -538,7 +545,7 @@ class TradingBot:
                     quantity=quantity,
                     target_profit_pct=take_profit_pct,
                     stop_loss_pct=stop_loss_pct,
-                    action=signal['action'],
+                    action=action,
                     partial_profit_enabled=partial_profit_enabled
                 )
         except Exception as e:
@@ -609,36 +616,46 @@ class TradingBot:
                 volatility=volatility
             )
             
+            # SAFE: Get all profit_data values with defaults
+            total_costs = profit_data.get('total_costs', 0.0)
+            net_profit = profit_data.get('net_profit', 0.0)
+            profit_pct = profit_data.get('profit_pct', 0.0)
+            entry_fee = profit_data.get('entry_fee', 0.0)
+            exit_fee = profit_data.get('exit_fee', 0.0)
+            entry_slippage = profit_data.get('entry_slippage', 0.0)
+            exit_slippage = profit_data.get('exit_slippage', 0.0)
+            spread_cost = profit_data.get('spread_cost', 0.0)
+            
             # Close position (use actual exit price)
             closed_position = self.position_manager.close_position(
                 symbol=symbol,
                 strategy=strategy_name,
                 exit_price=actual_exit_price,
                 exit_reason=reason,
-                fees=profit_data['total_costs']  # Include all costs
+                fees=total_costs  # Include all costs
             )
             
             if closed_position:
                 # Update position PnL with net profit (after all costs)
-                closed_position.pnl = profit_data['net_profit']
-                closed_position.pnl_pct = profit_data['profit_pct']
+                closed_position.pnl = net_profit
+                closed_position.pnl_pct = profit_pct
                 
                 # Update capital
-                self.current_capital += profit_data['net_profit']
-                self.risk_manager.record_trade(profit_data['net_profit'])
+                self.current_capital += net_profit
+                self.risk_manager.record_trade(net_profit)
                 self.risk_manager.set_capital(self.initial_capital, self.current_capital)
                 
                 # SAFETY: Record trade result for kill-switch
-                self.safety_manager.record_trade_result(profit_data['net_profit'])
+                self.safety_manager.record_trade_result(net_profit)
                 
-                logger.info(f"[PROFIT TAKEN] {symbol} - Net Profit: ${profit_data['net_profit']:.2f} ({profit_data['profit_pct']:.2f}%)")
-                logger.info(f"[COSTS] Entry: ${profit_data['entry_fee']:.2f}, Exit: ${profit_data['exit_fee']:.2f}, "
-                          f"Slippage: ${profit_data['entry_slippage'] + profit_data['exit_slippage']:.2f}, "
-                          f"Spread: ${profit_data['spread_cost']:.2f}, Total: ${profit_data['total_costs']:.2f}")
+                logger.info(f"[PROFIT TAKEN] {symbol} - Net Profit: ${net_profit:.2f} ({profit_pct:.2f}%)")
+                logger.info(f"[COSTS] Entry: ${entry_fee:.2f}, Exit: ${exit_fee:.2f}, "
+                          f"Slippage: ${entry_slippage + exit_slippage:.2f}, "
+                          f"Spread: ${spread_cost:.2f}, Total: ${total_costs:.2f}")
                 
                 # Auto compounding
-                if profit_data['net_profit'] > 0:
-                    compounded = self.compound_manager.add_profit(profit_data['net_profit'])
+                if net_profit > 0:
+                    compounded = self.compound_manager.add_profit(net_profit)
                     
                     if compounded > 0:
                         # Compounding triggered! Update capital
@@ -738,12 +755,14 @@ class TradingBot:
                 close_quantity=close_quantity,
                 exit_price=actual_exit_price,  # Use actual API fill price if live trading
                 exit_reason='PARTIAL_FEES_PROFIT',
-                fees=partial_profit_data['total_costs']
+                fees=partial_profit_data.get('total_costs', 0.0)
             )
             
             if result:
-                partial_pnl = result['pnl']
-                remaining_qty = result['remaining_quantity']
+                # SAFE: Get all result values with defaults
+                partial_pnl = result.get('pnl', 0.0)
+                remaining_qty = result.get('remaining_quantity', 0.0)
+                is_full_close = result.get('is_full_close', False)
                 
                 # Update capital with partial profit
                 self.current_capital += partial_pnl
@@ -753,7 +772,7 @@ class TradingBot:
                 logger.info(f"[PARTIAL CLOSE] {symbol} - Closed {close_quantity:.6f}, P&L: ${partial_pnl:.2f}, Remaining: {remaining_qty:.6f}")
                 
                 # Update monitor with remaining quantity
-                if not result['is_full_close']:
+                if not is_full_close:
                     # Re-add remaining position to monitor (with updated quantity)
                     position = self.position_manager.get_position(symbol, strategy_name)
                     if position:  # Still has remaining
@@ -820,9 +839,13 @@ class TradingBot:
                     closes, highs, lows, volumes, opens = klines
                     indicators = IndicatorCalculator.calculate_all(closes, highs, lows, volumes, opens)
                     if indicators:
-                        # Add spread
-                        spread_decimal = self.spread_simulator.get_spread(symbol)
-                        indicators['spread'] = spread_decimal * 100
+                        # Add spread (SAFE: check if indicators dict exists and is valid)
+                        try:
+                            spread_decimal = self.spread_simulator.get_spread(symbol)
+                            indicators['spread'] = spread_decimal * 100
+                        except Exception as e:
+                            logger.debug(f"[SKIP] Error getting spread for {symbol}: {e}")
+                            indicators['spread'] = 0.03  # Default 0.03% spread
                         
                         # Check exit conditions
                         exit_result = strategy.should_exit(position, current_price, indicators, datetime.now())

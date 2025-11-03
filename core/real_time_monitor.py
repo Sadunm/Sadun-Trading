@@ -187,46 +187,65 @@ class RealTimePriceMonitor:
                 
                 # Check all monitored positions (using snapshot to avoid lock during price checks)
                 for key, position_info in positions_snapshot:
-                    symbol = position_info['symbol']
-                    strategy = position_info['strategy']
-                    strategy_safe = str(strategy).replace('{', '{{').replace('}', '}}')  # Escape braces for f-string safety
+                    try:
+                        # SAFE: Get all required values with defaults
+                        symbol = position_info.get('symbol')
+                        if not symbol:
+                            continue  # Skip if no symbol
+                        
+                        strategy = position_info.get('strategy', 'unknown')
+                        
+                        # Safe strategy string for f-string (handle any edge cases)
+                        try:
+                            strategy_str = str(strategy) if strategy else 'unknown'
+                            strategy_safe = strategy_str.replace('{', '{{').replace('}', '}}')
+                        except Exception:
+                            strategy_safe = 'unknown'  # Fallback if any error
+                        
+                        # Get price (round-robin if available, otherwise direct)
+                        if hasattr(self.api_client, 'get_client'):
+                            # API rotator
+                            client = self.api_client.get_client()
+                            current_price = client.get_current_price(symbol)
+                        else:
+                            # Direct client
+                            current_price = self.api_client.get_current_price(symbol)
+                        
+                        if not current_price:
+                            if check_count % 60 == 0:  # Log occasionally to avoid spam
+                                logger.warning(f"[MONITOR] Could not get price for {symbol}")
+                            continue
+                        
+                        # Check if target, breakeven+profit, or stop reached
+                        target_reached = False
+                        breakeven_profit_reached = False
+                        stop_hit = False
+                        
+                        breakeven_price = position_info.get('breakeven_profit_price', None)
+                        entry_price = position_info.get('entry_price')
+                        target_price = position_info.get('target_price')
+                        stop_price = position_info.get('stop_price')
+                        action = position_info.get('action', 'BUY')
+                        
+                        # Validate all required values
+                        if entry_price is None or target_price is None or stop_price is None:
+                            logger.warning(f"[MONITOR] Missing price data for {symbol}, skipping")
+                            continue
                     
-                    # Get price (round-robin if available, otherwise direct)
-                    if hasattr(self.api_client, 'get_client'):
-                        # API rotator
-                        client = self.api_client.get_client()
-                        current_price = client.get_current_price(symbol)
-                    else:
-                        # Direct client
-                        current_price = self.api_client.get_current_price(symbol)
-                    
-                    if not current_price:
-                        if check_count % 60 == 0:  # Log occasionally to avoid spam
-                            logger.warning(f"[MONITOR] Could not get price for {symbol}")
-                        continue
-                    
-                    # Check if target, breakeven+profit, or stop reached
-                    target_reached = False
-                    breakeven_profit_reached = False
-                    stop_hit = False
-                    
-                    breakeven_price = position_info.get('breakeven_profit_price', None)
-                    entry_price = position_info['entry_price']
-                    
-                    if position_info['action'] == 'BUY':
-                        if current_price >= position_info['target_price']:
-                            target_reached = True
-                        elif breakeven_price and current_price >= breakeven_price:
-                            breakeven_profit_reached = True
-                        elif current_price <= position_info['stop_price']:
-                            stop_hit = True
-                    else:  # SELL (short)
-                        if current_price <= position_info['target_price']:
-                            target_reached = True
-                        elif breakeven_price and current_price <= breakeven_price:
-                            breakeven_profit_reached = True
-                        elif current_price >= position_info['stop_price']:
-                            stop_hit = True
+                        if action == 'BUY':
+                            if current_price >= target_price:
+                                target_reached = True
+                            elif breakeven_price and current_price >= breakeven_price:
+                                breakeven_profit_reached = True
+                            elif current_price <= stop_price:
+                                stop_hit = True
+                        else:  # SELL (short)
+                            if current_price <= target_price:
+                                target_reached = True
+                            elif breakeven_price and current_price <= breakeven_price:
+                                breakeven_profit_reached = True
+                            elif current_price >= stop_price:
+                                stop_hit = True
                     
                     # Log detailed status every 60 checks for debugging
                     if check_count % 60 == 0:
@@ -234,9 +253,9 @@ class RealTimePriceMonitor:
                         logger.debug(
                             f"[MONITOR] {symbol} ({strategy_safe}): "
                             f"Price=${current_price:.2f} (Entry=${entry_price:.2f}, {pct_change:+.2f}%), "
-                            f"Target=${position_info['target_price']:.2f}, "
+                            f"Target=${target_price:.2f}, "
                             f"Breakeven+Profit=${breakeven_price:.2f if breakeven_price else 'N/A'}, "
-                            f"Stop=${position_info['stop_price']:.2f}"
+                            f"Stop=${stop_price:.2f}"
                         )
                     
                         # Priority: Target > Breakeven+Profit (Partial) > Stop Loss
@@ -246,7 +265,7 @@ class RealTimePriceMonitor:
                             self.price_updates.put({
                                 'key': key,
                                 'symbol': symbol,
-                                'strategy': position_info['strategy'],
+                                'strategy': position_info.get('strategy', 'unknown'),
                                 'signal': 'TAKE_PROFIT',
                                 'current_price': current_price,
                                 'position_info': position_info
@@ -260,7 +279,7 @@ class RealTimePriceMonitor:
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
-                                    'strategy': position_info['strategy'],
+                                    'strategy': position_info.get('strategy', 'unknown'),
                                     'signal': 'PARTIAL_FEES_PROFIT',
                                     'current_price': current_price,
                                     'position_info': position_info
@@ -271,7 +290,7 @@ class RealTimePriceMonitor:
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
-                                    'strategy': position_info['strategy'],
+                                    'strategy': position_info.get('strategy', 'unknown'),
                                     'signal': 'BREAKEVEN_PROFIT',
                                     'current_price': current_price,
                                     'position_info': position_info
@@ -281,17 +300,21 @@ class RealTimePriceMonitor:
                             self.price_updates.put({
                                 'key': key,
                                 'symbol': symbol,
-                                'strategy': position_info['strategy'],
+                                'strategy': position_info.get('strategy', 'unknown'),
                                 'signal': 'STOP_LOSS',
                                 'current_price': current_price,
                                 'position_info': position_info
                             })
+                    except Exception as e:
+                        # Handle per-position errors gracefully
+                        logger.error(f"[ERROR] Error monitoring position {key}: {e}", exc_info=True)
+                        continue  # Skip this position, continue with others
                 
                 # Wait before next check
                 time.sleep(self.check_interval)
                 
             except Exception as e:
-                logger.error(f"[ERROR] Error in price monitoring: {e}", exc_info=True)
+                logger.error(f"[ERROR] Error in price monitoring loop: {e}", exc_info=True)
                 time.sleep(self.check_interval)
     
     def stop_monitoring(self):
