@@ -184,6 +184,7 @@ class RealTimePriceMonitor:
                 for key, position_info in positions_snapshot:
                     symbol = position_info['symbol']
                     strategy = position_info['strategy']
+                    strategy_safe = str(strategy).replace('{', '{{').replace('}', '}}')  # Escape braces for f-string safety
                     
                     # Get price (round-robin if available, otherwise direct)
                     if hasattr(self.api_client, 'get_client'):
@@ -226,7 +227,7 @@ class RealTimePriceMonitor:
                     if check_count % 60 == 0:
                         pct_change = ((current_price - entry_price) / entry_price * 100.0) if entry_price > 0 else 0.0
                         logger.debug(
-                            f"[MONITOR] {symbol} ({strategy}): "
+                            f"[MONITOR] {symbol} ({strategy_safe}): "
                             f"Price=${current_price:.2f} (Entry=${entry_price:.2f}, {pct_change:+.2f}%), "
                             f"Target=${position_info['target_price']:.2f}, "
                             f"Breakeven+Profit=${breakeven_price:.2f if breakeven_price else 'N/A'}, "
@@ -236,7 +237,7 @@ class RealTimePriceMonitor:
                         # Priority: Target > Breakeven+Profit (Partial) > Stop Loss
                         # Send signal if any condition reached
                         if target_reached:
-                            logger.info(f"[MONITOR] {symbol} ({strategy}) TARGET REACHED! Price: ${current_price:.2f}")
+                            logger.info(f"[MONITOR] {symbol} ({strategy_safe}) TARGET REACHED! Price: ${current_price:.2f}")
                             self.price_updates.put({
                                 'key': key,
                                 'symbol': symbol,
@@ -250,7 +251,7 @@ class RealTimePriceMonitor:
                             # Check if partial profit taking enabled
                             if position_info.get('partial_profit_enabled', False):
                                 # PARTIAL CLOSE: Close fees amount, keep rest for target
-                                logger.info(f"[MONITOR] {symbol} ({strategy}) FEES COVERED! Partial close at ${current_price:.2f} (Breakeven: ${breakeven_price:.2f})")
+                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) FEES COVERED! Partial close at ${current_price:.2f} (Breakeven: ${breakeven_price:.2f})")
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
@@ -261,7 +262,7 @@ class RealTimePriceMonitor:
                                 })
                             else:
                                 # FULL CLOSE: Old behavior (close everything)
-                                logger.info(f"[MONITOR] {symbol} ({strategy}) BREAKEVEN+PROFIT REACHED! Full close at ${current_price:.2f}")
+                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) BREAKEVEN+PROFIT REACHED! Full close at ${current_price:.2f}")
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
@@ -271,7 +272,7 @@ class RealTimePriceMonitor:
                                     'position_info': position_info
                                 })
                         elif stop_hit:
-                            logger.warning(f"[MONITOR] {symbol} ({strategy}) STOP LOSS HIT! Price: ${current_price:.2f}")
+                            logger.warning(f"[MONITOR] {symbol} ({strategy_safe}) STOP LOSS HIT! Price: ${current_price:.2f}")
                             self.price_updates.put({
                                 'key': key,
                                 'symbol': symbol,
