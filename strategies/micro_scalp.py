@@ -1,7 +1,7 @@
 """
 STRATEGY-1: Micro-Scalp Profit System
-Goal: 0.25% net profit per trade (after fees), quick closes, compound growth
-Capital: $10 (strict entry, precision over frequency)
+Goal: 1.10% net profit per trade (after fees), quick closes, compound growth
+Capital: $10 (ULTRA-STRICT entry, only highest quality)
 """
 from typing import Dict, Any, Optional
 from strategies.base_strategy import BaseStrategy
@@ -14,8 +14,8 @@ logger = setup_logger("micro_scalp")
 class MicroScalpStrategy(BaseStrategy):
     """
     Micro-Scalp Strategy for $10 capital
-    - Strict entry rules (precision over frequency)
-    - 0.25% net profit target (after fees)
+    - ULTRA-STRICT entry rules (only highest quality = prevent losses)
+    - 1.10% net profit target (after fees)
     - Fast exits with trailing stop
     - Maximum 3 positions ($2 each)
     """
@@ -23,23 +23,24 @@ class MicroScalpStrategy(BaseStrategy):
     def __init__(self, name: str, config: Dict[str, Any]):
         super().__init__(name, config)
         # Override base config for micro-scalp (values from config.yaml)
-        self.max_hold_time_minutes = config.get('max_hold_time_minutes', 30)  # 30 min timeout
-        self.stop_loss_pct = config.get('stop_loss_pct', 0.20)  # -0.20% stop loss (was 0.15%, increased to prevent instant hits)
-        self.take_profit_pct = config.get('take_profit_pct', 0.50)  # +0.50% target (was 0.45%, increased for better risk/reward)
+        self.max_hold_time_minutes = config.get('max_hold_time_minutes', 20)  # 20 min timeout (reduced for faster exits)
+        self.stop_loss_pct = config.get('stop_loss_pct', 0.55)  # -0.55% stop loss (INCREASED from 0.25% to prevent instant hits)
+        self.take_profit_pct = config.get('take_profit_pct', 1.10)  # +1.10% target (INCREASED from 0.70% to compensate)
         
-        # Entry filters (OPTIMIZED for quality - proven safe for small capital)
-        self.min_volatility_pct = 0.12  # Volatility > 0.12% (5m) - proven threshold for profitable scalps
-        self.rsi_min = 35  # RSI between 35-55 (neutral zone) - proven optimal range for scalping
-        self.rsi_max = 55
-        self.volume_spike_ratio = 1.0  # Volume ≥ 1.0x average - proven minimum for reliable moves
-        self.max_spread_pct = 0.04  # Spread < 0.04% - proven threshold (cost control for $10 capital)
+        # Entry filters (ULTRA-STRICT to prevent losses - only highest quality trades)
+        self.min_volatility_pct = 0.15  # INCREASED: Volatility > 0.15% (was 0.12%) - need stronger moves
+        self.rsi_min = 38  # TIGHTENED: RSI between 38-52 (was 35-55) - more precise entries
+        self.rsi_max = 52
+        self.volume_spike_ratio = 1.2  # INCREASED: Volume ≥ 1.2x average (was 1.0x) - need stronger momentum
+        self.max_spread_pct = 0.03  # TIGHTENED: Spread < 0.03% (was 0.04%) - lower costs
         
         # Exit enhancements (OPTIMIZED for safe profits - proven techniques)
-        self.trailing_start_pct = 0.35  # Start trailing when profit > +0.35% (let winners run)
-        self.trailing_stop_pct = 0.08  # Trailing stop at 0.08% (tight to protect profits)
+        self.trailing_start_pct = 0.50  # Start trailing when profit > +0.50% (let winners run)
+        self.trailing_stop_pct = 0.10  # Trailing stop at 0.10% (tight to protect profits)
         self.volume_drop_threshold = 0.35  # Auto-close if volume drops > 35% (faster exit = lower risk)
         
         logger.info(f"[MICRO-SCALP] Initialized - Target: {self.take_profit_pct}%, SL: {self.stop_loss_pct}%, Timeout: {self.max_hold_time_minutes}min")
+        logger.info(f"[MICRO-SCALP] Entry Filters: Volatility>{self.min_volatility_pct}%, RSI {self.rsi_min}-{self.rsi_max}, Volume≥{self.volume_spike_ratio}x, Spread<{self.max_spread_pct}%")
     
     def generate_signal(
         self,
@@ -49,107 +50,61 @@ class MicroScalpStrategy(BaseStrategy):
         market_regime: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Generate signal with STRICT entry rules
-        Only signals when ALL conditions match (precision over frequency)
+        Generate micro-scalp signal (ULTRA-STRICT entry rules)
         """
         try:
-            # Required indicators
-            rsi = indicators.get('rsi', 50.0)
-            ema_5 = indicators.get('ema_5', None)
-            ema_10 = indicators.get('ema_10', None)
-            volume_ratio = indicators.get('volume_ratio', 1.0)
-            atr_pct = indicators.get('atr_pct', 0.0)
-            spread = indicators.get('spread', 0.0)
-            
-            # Validate all indicators present
-            if ema_5 is None or ema_10 is None:
+            if not self.enabled:
                 return None
             
-            # STRICT FILTER 1: Volatility check (> 0.15%)
+            # Get indicators
+            rsi = indicators.get('rsi', 50.0)
+            volume_ratio = indicators.get('volume_ratio', 1.0)
+            atr_pct = indicators.get('atr_pct', 0.0)
+            spread_pct = indicators.get('spread', 0.0)
+            
+            # EMA crossover check
+            ema_9 = indicators.get('ema_9', price)
+            ema_21 = indicators.get('ema_21', price)
+            ema_cross = ema_9 > ema_21  # Bullish crossover
+            
+            # FILTER 1: Volatility check (STRICT - need strong moves)
             if atr_pct < self.min_volatility_pct:
-                # Log occasionally to avoid spam
-                if not hasattr(self, '_filter_log_count'):
-                    self._filter_log_count = {}
-                count = self._filter_log_count.get(f"{symbol}_atr", 0)
-                self._filter_log_count[f"{symbol}_atr"] = count + 1
-                if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: ATR={atr_pct:.2f}% < {self.min_volatility_pct:.2f}% threshold")
-                return None  # Skip - not volatile enough
+                return None
             
-            # STRICT FILTER 2: RSI in neutral zone (35-55)
+            # FILTER 2: RSI check (TIGHTENED range for precise entries)
             if rsi < self.rsi_min or rsi > self.rsi_max:
-                if not hasattr(self, '_filter_log_count'):
-                    self._filter_log_count = {}
-                count = self._filter_log_count.get(f"{symbol}_rsi", 0)
-                self._filter_log_count[f"{symbol}_rsi"] = count + 1
-                if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: RSI={rsi:.1f} not in [{self.rsi_min}-{self.rsi_max}] zone")
-                return None  # Skip - RSI outside neutral zone
+                return None
             
-            # STRICT FILTER 3: EMA crossover or EMA5 > EMA10
-            ema_crossover = False
-            if ema_5 > ema_10:
-                ema_crossover = True
-            else:
-                # Check if crossover just happened (within last 2 bars)
-                ema_5_prev = indicators.get('ema_5_prev', ema_5)
-                ema_10_prev = indicators.get('ema_10_prev', ema_10)
-                if ema_5_prev <= ema_10_prev and ema_5 > ema_10:
-                    ema_crossover = True
-            
-            if not ema_crossover:
-                if not hasattr(self, '_filter_log_count'):
-                    self._filter_log_count = {}
-                count = self._filter_log_count.get(f"{symbol}_ema", 0)
-                self._filter_log_count[f"{symbol}_ema"] = count + 1
-                if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: EMA5={ema_5:.2f} <= EMA10={ema_10:.2f} (no crossover)")
-                return None  # Skip - no EMA confirmation
-            
-            # STRICT FILTER 4: Volume spike (≥ 1.2x average)
+            # FILTER 3: Volume check (STRICT - need strong momentum)
             if volume_ratio < self.volume_spike_ratio:
-                if not hasattr(self, '_filter_log_count'):
-                    self._filter_log_count = {}
-                count = self._filter_log_count.get(f"{symbol}_vol", 0)
-                self._filter_log_count[f"{symbol}_vol"] = count + 1
-                if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Volume={volume_ratio:.2f}x < {self.volume_spike_ratio:.1f}x threshold")
-                return None  # Skip - insufficient volume
+                return None
             
-            # STRICT FILTER 5: Spread check (< 0.03%)
-            if spread >= self.max_spread_pct:
-                if not hasattr(self, '_filter_log_count'):
-                    self._filter_log_count = {}
-                count = self._filter_log_count.get(f"{symbol}_spread", 0)
-                self._filter_log_count[f"{symbol}_spread"] = count + 1
-                if count % 50 == 0:
-                    logger.info(f"[FILTER] {symbol} MICRO-SCALP: Spread={spread:.3f}% >= {self.max_spread_pct}% (low liquidity)")
-                return None  # Skip - spread too high (low liquidity)
+            # FILTER 4: Spread check (TIGHTENED - lower costs)
+            if spread_pct > self.max_spread_pct:
+                return None
             
-            # ALL FILTERS PASSED - Generate BUY signal
-            # Calculate confidence based on how strong each condition is
+            # FILTER 5: EMA crossover (must be bullish)
+            if not ema_cross:
+                return None
+            
+            # Calculate confidence
             confidence = self._calculate_confidence(indicators, rsi, volume_ratio, atr_pct)
             
-            if confidence >= self.confidence_threshold:
-                logger.info(
-                    f"[MICRO-SCALP] {symbol} BUY: "
-                    f"RSI={rsi:.1f} (35-55✓), "
-                    f"EMA5={ema_5:.2f}>EMA10={ema_10:.2f}✓, "
-                    f"Vol={volume_ratio:.2f}x✓, "
-                    f"ATR={atr_pct:.2f}%✓, "
-                    f"Spread={spread:.3f}%✓, "
-                    f"Conf={confidence:.1f}%"
-                )
-                return {
-                    'action': 'BUY',
-                    'confidence': confidence,
-                    'reason': 'Micro-Scalp Strict Entry: All Filters Passed'
-                }
+            # Only take high confidence signals
+            if confidence < self.confidence_threshold:
+                return None
             
-            return None
+            # Determine action
+            action = 'BUY'  # Micro-scalp only does BUY (simpler)
+            
+            return {
+                'action': action,
+                'confidence': confidence,
+                'reason': 'MICRO_SCALP'
+            }
             
         except Exception as e:
-            logger.error(f"[ERROR] Error generating micro-scalp signal: {e}")
+            logger.error(f"[ERROR] Error generating micro-scalp signal for {symbol}: {e}", exc_info=True)
             return None
     
     def _calculate_confidence(
@@ -159,7 +114,9 @@ class MicroScalpStrategy(BaseStrategy):
         volume_ratio: float,
         atr_pct: float
     ) -> float:
-        """Calculate confidence score for entry"""
+        """
+        Calculate confidence score (0-100)
+        """
         base_confidence = 20.0
         
         # RSI bonus (closer to 50 = more neutral, better)
@@ -167,8 +124,8 @@ class MicroScalpStrategy(BaseStrategy):
         rsi_distance = abs(rsi - rsi_center)
         rsi_bonus = max(0, 10 - rsi_distance)  # Max +10 if RSI = 50
         
-        # Volume bonus (higher volume = better) - optimized for new 1.0x threshold
-        volume_bonus = min(10, (volume_ratio - 1.0) * 10)  # Max +10 (was 1.2x, now 1.0x base)
+        # Volume bonus (higher volume = better) - optimized for new 1.2x threshold
+        volume_bonus = min(10, (volume_ratio - 1.2) * 10)  # Max +10 (base is now 1.2x)
         
         # Volatility bonus (moderate volatility is good)
         volatility_bonus = min(5, max(0, (atr_pct - 0.15) * 20))  # Max +5
@@ -185,11 +142,11 @@ class MicroScalpStrategy(BaseStrategy):
     ) -> Optional[Dict[str, Any]]:
         """
         Enhanced exit logic:
-        - +0.45% target (covers fees + profit)
-        - -0.15% stop loss
-        - 30min timeout
-        - Volume drop > 40%
-        - Dynamic trailing when profit > +0.3%
+        - +1.10% target (covers fees + profit)
+        - -0.55% stop loss
+        - 20min timeout
+        - Volume drop > 35%
+        - Dynamic trailing when profit > +0.50%
         """
         try:
             if position.action == 'BUY':
@@ -201,51 +158,50 @@ class MicroScalpStrategy(BaseStrategy):
             # Exit reason
             exit_reason = None
             
-            # CHECK 1: Take profit reached (+0.45%)
+            # CHECK 1: Take profit reached (+1.10%)
             if price_change >= self.take_profit_pct:
                 exit_reason = 'TAKE_PROFIT'
             
-            # CHECK 2: Stop loss hit (-0.15%)
+            # CHECK 2: Stop loss hit (-0.55%)
             elif price_change <= -self.stop_loss_pct:
                 exit_reason = 'STOP_LOSS'
             
-            # CHECK 3: Timeout (30 min)
+            # CHECK 3: Timeout (20 min)
             else:
                 from datetime import datetime
                 hold_time = (datetime.now() - position.entry_time).total_seconds() / 60
                 if hold_time >= self.max_hold_time_minutes:
                     exit_reason = 'TIMEOUT'
             
-            # CHECK 4: Volume drop > 40%
+            # CHECK 4: Volume drop > 35%
             if not exit_reason:
                 volume_ratio = indicators.get('volume_ratio', 1.0)
                 entry_volume_ratio = getattr(position, 'entry_volume_ratio', 1.0)
                 if volume_ratio < (entry_volume_ratio * (1 - self.volume_drop_threshold)):
                     exit_reason = 'VOLUME_DROP'
             
-            # CHECK 5: Dynamic trailing stop (when profit > +0.3%)
+            # CHECK 5: Dynamic trailing stop (when profit > +0.50%)
             if not exit_reason and price_change > self.trailing_start_pct:
-                # Trailing stop: if price drops 0.1% from peak, exit
-                peak_profit = getattr(position, 'peak_profit_pct', price_change)
-                if price_change > peak_profit:
-                    # Update peak
-                    position.peak_profit_pct = price_change
-                else:
-                    # Check if dropped from peak by trailing amount
-                    drop_from_peak = peak_profit - price_change
-                    if drop_from_peak >= self.trailing_stop_pct:
-                        exit_reason = 'TRAILING_STOP'
+                # Calculate highest profit reached (from position metadata if available)
+                highest_profit = getattr(position, 'highest_profit_pct', price_change)
+                if price_change > highest_profit:
+                    highest_profit = price_change
+                    position.highest_profit_pct = highest_profit  # Store for next check
+                
+                # Check if profit dropped from peak by trailing stop amount
+                profit_drop = highest_profit - price_change
+                if profit_drop >= self.trailing_stop_pct:
+                    exit_reason = 'TRAILING_STOP'
             
             if exit_reason:
                 return {
                     'should_exit': True,
                     'reason': exit_reason,
-                    'profit_pct': price_change
+                    'current_profit_pct': price_change
                 }
             
             return None
             
         except Exception as e:
-            logger.error(f"[ERROR] Error checking exit: {e}")
+            logger.error(f"[ERROR] Error in should_exit for {position.symbol}: {e}", exc_info=True)
             return None
-

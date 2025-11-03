@@ -51,8 +51,8 @@ class RealTimePriceMonitor:
             key = f"{symbol}_{strategy}"
             
             # Calculate prices with buffer for stop loss (to account for exit slippage/spread)
-            # Buffer: ~0.08% for spread + slippage on exit
-            stop_loss_buffer_pct = 0.08
+            # Buffer: ~0.12% for spread + slippage on exit (INCREASED from 0.08% to account for real market conditions)
+            stop_loss_buffer_pct = 0.12
             effective_sl_pct = stop_loss_pct + stop_loss_buffer_pct
             
             if action.upper() == 'BUY':
