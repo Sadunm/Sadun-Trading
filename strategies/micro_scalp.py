@@ -23,16 +23,16 @@ class MicroScalpStrategy(BaseStrategy):
     def __init__(self, name: str, config: Dict[str, Any]):
         super().__init__(name, config)
         # Override base config for micro-scalp (values from config.yaml)
-        self.max_hold_time_minutes = config.get('max_hold_time_minutes', 20)  # 20 min timeout (reduced for faster exits)
-        self.stop_loss_pct = config.get('stop_loss_pct', 0.55)  # -0.55% stop loss (INCREASED from 0.25% to prevent instant hits)
-        self.take_profit_pct = config.get('take_profit_pct', 1.10)  # +1.10% target (INCREASED from 0.70% to compensate)
+        self.max_hold_time_minutes = config.get('max_hold_time_minutes', 15)  # 15 min timeout (reduced for faster exits)
+        self.stop_loss_pct = config.get('stop_loss_pct', 0.70)  # -0.70% stop loss (INCREASED from 0.55% - actual losses were 0.50-0.59%)
+        self.take_profit_pct = config.get('take_profit_pct', 1.20)  # +1.20% target (INCREASED from 1.10% to compensate)
         
         # Entry filters (ULTRA-STRICT to prevent losses - only highest quality trades)
-        self.min_volatility_pct = 0.15  # INCREASED: Volatility > 0.15% (was 0.12%) - need stronger moves
-        self.rsi_min = 38  # TIGHTENED: RSI between 38-52 (was 35-55) - more precise entries
-        self.rsi_max = 52
-        self.volume_spike_ratio = 1.2  # INCREASED: Volume ≥ 1.2x average (was 1.0x) - need stronger momentum
-        self.max_spread_pct = 0.03  # TIGHTENED: Spread < 0.03% (was 0.04%) - lower costs
+        self.min_volatility_pct = 0.18  # INCREASED: Volatility > 0.18% (was 0.15%) - need even stronger moves
+        self.rsi_min = 40  # TIGHTENED: RSI between 40-50 (was 38-52) - more precise neutral entries
+        self.rsi_max = 50
+        self.volume_spike_ratio = 1.3  # INCREASED: Volume ≥ 1.3x average (was 1.2x) - need stronger momentum
+        self.max_spread_pct = 0.025  # TIGHTENED: Spread < 0.025% (was 0.03%) - even lower costs
         
         # Exit enhancements (OPTIMIZED for safe profits - proven techniques)
         self.trailing_start_pct = 0.50  # Start trailing when profit > +0.50% (let winners run)

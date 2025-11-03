@@ -79,18 +79,18 @@ strategies:
     take_profit_pct: 0.55      # Balanced target (was 0.50, tried 0.65)
   
   momentum:
-    enabled: true
-    confidence_threshold: 20.0  # BALANCED: Moderate filtering (was 18.0, tried 25.0)
-    max_hold_time_minutes: 480
-    stop_loss_pct: 1.2         # Wider stop - momentum needs room
-    take_profit_pct: 0.65      # Balanced target (was 0.60, tried 0.75)
+    enabled: false  # DISABLED: Too many large losses (-2.07%, -1.89%, -1.84%) - not profitable with small capital
+    confidence_threshold: 25.0  # STRICT if re-enabled
+    max_hold_time_minutes: 240
+    stop_loss_pct: 2.0         # Much wider stop if re-enabled (actual losses were 2.07%)
+    take_profit_pct: 1.0       # Higher target to compensate
   
   micro_scalp:
-    enabled: true              # STRATEGY-1: Micro-Scalp Profit System (FIXED for real losses)
-    confidence_threshold: 30.0 # ULTRA-STRICT entry (only highest quality = prevent losses) - increased from 28.0
-    max_hold_time_minutes: 20  # 20 min timeout (faster exits = lower risk) - reduced from 25
-    stop_loss_pct: 0.55        # -0.55% stop loss (with 0.08% buffer = -0.63% effective) - INCREASED from 0.25% to prevent instant hits
-    take_profit_pct: 1.10      # +1.10% target (risk/reward 1:2.0) - INCREASED from 0.70% to compensate for wider stop
+    enabled: true              # STRATEGY-1: Micro-Scalp Profit System (FIXED - exit costs accounted)
+    confidence_threshold: 32.0 # ULTRA-STRICT entry (only highest quality = prevent losses) - increased from 30.0
+    max_hold_time_minutes: 15  # 15 min timeout (faster exits = lower risk) - reduced from 20
+    stop_loss_pct: 0.70        # -0.70% stop loss (with 0.12% buffer = -0.82% effective, plus exit slippage/spread ~0.15% = ~0.97% total room) - INCREASED from 0.55%
+    take_profit_pct: 1.20      # +1.20% target (risk/reward 1:1.7) - INCREASED from 1.10% to compensate for wider stop
 
 api:
   max_retries: 3
