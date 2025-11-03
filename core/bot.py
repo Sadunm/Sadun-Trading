@@ -315,7 +315,12 @@ class TradingBot:
                 try:
                     self._scan_symbol(symbol)
                 except Exception as e:
-                    logger.error(f"[ERROR] Error scanning {symbol}: {e}")
+                    # Handle 400 errors (symbol not available) gracefully
+                    error_str = str(e).lower()
+                    if '400' in error_str or 'bad request' in error_str or 'not available' in error_str:
+                        logger.debug(f"[SKIP] {symbol} not available, skipping silently")
+                    else:
+                        logger.error(f"[ERROR] Error scanning {symbol}: {e}", exc_info=True)
         except Exception as e:
             logger.error(f"[ERROR] Error in trading cycle: {e}")
     

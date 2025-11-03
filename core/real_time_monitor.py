@@ -50,12 +50,17 @@ class RealTimePriceMonitor:
         try:
             key = f"{symbol}_{strategy}"
             
+            # Calculate prices with buffer for stop loss (to account for exit slippage/spread)
+            # Buffer: ~0.08% for spread + slippage on exit
+            stop_loss_buffer_pct = 0.08
+            effective_sl_pct = stop_loss_pct + stop_loss_buffer_pct
+            
             if action.upper() == 'BUY':
                 target_price = entry_price * (1 + target_profit_pct / 100.0)
-                stop_price = entry_price * (1 - stop_loss_pct / 100.0)
+                stop_price = entry_price * (1 - effective_sl_pct / 100.0)  # Buffer added
             else:  # SELL (short)
                 target_price = entry_price * (1 - target_profit_pct / 100.0)
-                stop_price = entry_price * (1 + stop_loss_pct / 100.0)
+                stop_price = entry_price * (1 + effective_sl_pct / 100.0)  # Buffer added
             
             # Calculate breakeven + small profit price (fees covered + 0.05% profit)
             breakeven_price = self._calculate_breakeven_plus_profit(

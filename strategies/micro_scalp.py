@@ -22,10 +22,10 @@ class MicroScalpStrategy(BaseStrategy):
     
     def __init__(self, name: str, config: Dict[str, Any]):
         super().__init__(name, config)
-        # Override base config for micro-scalp
-        self.max_hold_time_minutes = 30  # 30 min timeout
-        self.stop_loss_pct = 0.15  # -0.15% stop loss
-        self.take_profit_pct = 0.45  # +0.45% target (covers 0.2% fees + 0.25% profit)
+        # Override base config for micro-scalp (values from config.yaml)
+        self.max_hold_time_minutes = config.get('max_hold_time_minutes', 30)  # 30 min timeout
+        self.stop_loss_pct = config.get('stop_loss_pct', 0.20)  # -0.20% stop loss (was 0.15%, increased to prevent instant hits)
+        self.take_profit_pct = config.get('take_profit_pct', 0.50)  # +0.50% target (was 0.45%, increased for better risk/reward)
         
         # Entry filters (RELAXED for testnet/low volume markets)
         self.min_volatility_pct = 0.10  # Volatility > 0.10% (5m) - relaxed from 0.15%

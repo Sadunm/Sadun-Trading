@@ -129,18 +129,33 @@ class RiskManager:
             logger.error(f"[ERROR] Error calculating position size: {e}")
             return 0.0
     
-    def calculate_stop_loss(self, entry_price: float, action: str, custom_pct: Optional[float] = None) -> float:
-        """Calculate stop loss price"""
+    def calculate_stop_loss(self, entry_price: float, action: str, custom_pct: Optional[float] = None, 
+                           add_buffer: bool = True) -> float:
+        """
+        Calculate stop loss price
+        
+        Args:
+            entry_price: Entry price (already includes slippage/spread)
+            action: 'BUY' or 'SELL'
+            custom_pct: Custom stop loss percentage
+            add_buffer: Add buffer for exit slippage/spread (default: True)
+                       Buffer: ~0.08% for spread + slippage on exit
+        """
         try:
             if not validate_price(entry_price):
                 raise ValueError(f"Invalid entry price: {entry_price}")
             
             stop_loss_pct = custom_pct if custom_pct is not None else self.stop_loss_pct
             
+            # Add buffer for exit slippage/spread to prevent instant stop loss hits
+            # Exit will also have slippage/spread, so we need extra room
+            buffer_pct = 0.08 if add_buffer else 0.0  # ~0.03% spread + ~0.05% slippage
+            effective_sl_pct = stop_loss_pct + buffer_pct
+            
             if action.upper() == 'BUY':
-                stop_loss = entry_price * (1 - stop_loss_pct / 100.0)
+                stop_loss = entry_price * (1 - effective_sl_pct / 100.0)
             else:  # SELL
-                stop_loss = entry_price * (1 + stop_loss_pct / 100.0)
+                stop_loss = entry_price * (1 + effective_sl_pct / 100.0)
             
             return stop_loss
             

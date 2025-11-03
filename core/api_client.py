@@ -93,6 +93,14 @@ class BinanceAPIClient:
                 time.sleep(wait_time)
                 
             except requests.exceptions.HTTPError as e:
+                # Handle 400 errors (symbol not available) gracefully
+                if e.response.status_code == 400:
+                    error_msg = str(e).lower()
+                    if 'bad request' in error_msg or 'symbol' in error_msg:
+                        # Symbol not available on testnet - return None instead of raising
+                        logger.debug(f"[SKIP] Symbol not available on testnet (400 error): {endpoint}")
+                        return None  # Return None for unavailable symbols
+                
                 if e.response.status_code == 429:  # Rate limit
                     if attempt == self.max_retries - 1:
                         raise APIError("Rate limit exceeded")
@@ -113,6 +121,11 @@ class BinanceAPIClient:
         """Get current price for symbol"""
         try:
             response = self._make_request('GET', '/api/v3/ticker/price', {'symbol': symbol})
+            
+            # Handle None response (symbol not available)
+            if response is None:
+                return None
+            
             data = response.json()
             price = float(data['price'])
             
@@ -120,7 +133,15 @@ class BinanceAPIClient:
                 raise ValueError(f"Invalid price: {price}")
             
             return price
+        except (ValueError, KeyError, TypeError) as e:
+            logger.debug(f"[SKIP] Error getting price for {symbol}: {e}")
+            return None
         except Exception as e:
+            # Handle 400 errors gracefully
+            error_str = str(e).lower()
+            if '400' in error_str or 'bad request' in error_str:
+                logger.debug(f"[SKIP] {symbol} not available on testnet")
+                return None
             logger.error(f"[ERROR] Error getting price for {symbol}: {e}")
             return None
     
@@ -133,6 +154,11 @@ class BinanceAPIClient:
                 'limit': limit
             }
             response = self._make_request('GET', '/api/v3/klines', params)
+            
+            # Handle None response (symbol not available)
+            if response is None:
+                return None
+            
             klines = response.json()
             
             # Parse klines

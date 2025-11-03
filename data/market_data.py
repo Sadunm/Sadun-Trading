@@ -62,6 +62,13 @@ class MarketData:
             return klines
             
         except Exception as e:
+            # Filter 400 errors for symbols not available on testnet (silent skip)
+            error_str = str(e).lower()
+            if '400' in error_str or 'bad request' in error_str:
+                logger.debug(f"[SKIP] {symbol} not available on testnet, skipping silently")
+                # Cache None to avoid repeated requests
+                self._klines_cache[cache_key] = (None, now)
+                return None
             logger.error(f"[ERROR] Error getting klines for {symbol}: {e}")
             return None
 
