@@ -257,54 +257,54 @@ class RealTimePriceMonitor:
                                 f"Breakeven+Profit=${breakeven_price:.2f if breakeven_price else 'N/A'}, "
                                 f"Stop=${stop_price:.2f}"
                             )
-                    
-                            # Priority: Target > Breakeven+Profit (Partial) > Stop Loss
-                            # Send signal if any condition reached
-                            if target_reached:
-                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) TARGET REACHED! Price: ${current_price:.2f}")
+                        
+                        # Priority: Target > Breakeven+Profit (Partial) > Stop Loss
+                        # Send signal if any condition reached (check every iteration, not just every 60)
+                        if target_reached:
+                            logger.info(f"[MONITOR] {symbol} ({strategy_safe}) TARGET REACHED! Price: ${current_price:.2f}")
+                            self.price_updates.put({
+                                'key': key,
+                                'symbol': symbol,
+                                'strategy': position_info.get('strategy', 'unknown'),
+                                'signal': 'TAKE_PROFIT',
+                                'current_price': current_price,
+                                'position_info': position_info
+                            })
+                        elif breakeven_profit_reached:
+                            # Fees covered + small profit achieved
+                            # Check if partial profit taking enabled
+                            if position_info.get('partial_profit_enabled', False):
+                                # PARTIAL CLOSE: Close fees amount, keep rest for target
+                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) FEES COVERED! Partial close at ${current_price:.2f} (Breakeven: ${breakeven_price:.2f})")
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
                                     'strategy': position_info.get('strategy', 'unknown'),
-                                    'signal': 'TAKE_PROFIT',
+                                    'signal': 'PARTIAL_FEES_PROFIT',
                                     'current_price': current_price,
                                     'position_info': position_info
                                 })
-                            elif breakeven_profit_reached:
-                                # Fees covered + small profit achieved
-                                # Check if partial profit taking enabled
-                                if position_info.get('partial_profit_enabled', False):
-                                    # PARTIAL CLOSE: Close fees amount, keep rest for target
-                                    logger.info(f"[MONITOR] {symbol} ({strategy_safe}) FEES COVERED! Partial close at ${current_price:.2f} (Breakeven: ${breakeven_price:.2f})")
-                                    self.price_updates.put({
-                                        'key': key,
-                                        'symbol': symbol,
-                                        'strategy': position_info.get('strategy', 'unknown'),
-                                        'signal': 'PARTIAL_FEES_PROFIT',
-                                        'current_price': current_price,
-                                        'position_info': position_info
-                                    })
-                                else:
-                                    # FULL CLOSE: Old behavior (close everything)
-                                    logger.info(f"[MONITOR] {symbol} ({strategy_safe}) BREAKEVEN+PROFIT REACHED! Full close at ${current_price:.2f}")
-                                    self.price_updates.put({
-                                        'key': key,
-                                        'symbol': symbol,
-                                        'strategy': position_info.get('strategy', 'unknown'),
-                                        'signal': 'BREAKEVEN_PROFIT',
-                                        'current_price': current_price,
-                                        'position_info': position_info
-                                    })
-                            elif stop_hit:
-                                logger.warning(f"[MONITOR] {symbol} ({strategy_safe}) STOP LOSS HIT! Price: ${current_price:.2f}")
+                            else:
+                                # FULL CLOSE: Old behavior (close everything)
+                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) BREAKEVEN+PROFIT REACHED! Full close at ${current_price:.2f}")
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
                                     'strategy': position_info.get('strategy', 'unknown'),
-                                    'signal': 'STOP_LOSS',
+                                    'signal': 'BREAKEVEN_PROFIT',
                                     'current_price': current_price,
                                     'position_info': position_info
                                 })
+                        elif stop_hit:
+                            logger.warning(f"[MONITOR] {symbol} ({strategy_safe}) STOP LOSS HIT! Price: ${current_price:.2f}")
+                            self.price_updates.put({
+                                'key': key,
+                                'symbol': symbol,
+                                'strategy': position_info.get('strategy', 'unknown'),
+                                'signal': 'STOP_LOSS',
+                                'current_price': current_price,
+                                'position_info': position_info
+                            })
                     except Exception as e:
                         # Handle per-position errors gracefully
                         logger.error(f"[ERROR] Error monitoring position {key}: {e}", exc_info=True)
