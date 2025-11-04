@@ -63,9 +63,11 @@ class RealTimePriceMonitor:
                 target_price = entry_price * (1 - target_profit_pct / 100.0)
                 stop_price = entry_price * (1 + effective_sl_pct / 100.0)  # Buffer added
             
-            # Calculate breakeven + small profit price (fees covered + 0.05% profit)
+            # Calculate breakeven + MINIMUM profit price (fees covered + 0.50% profit = ensures net profit > 0.30%)
+            # CRITICAL: Must be high enough to cover all costs (fees 0.13% + slippage ~0.10% + spread ~0.03% = ~0.26%)
+            # Minimum 0.50% gross profit = 0.50% - 0.26% = 0.24% net profit (actual profit)
             breakeven_price = self._calculate_breakeven_plus_profit(
-                symbol, entry_price, quantity, action, min_profit_pct=0.05
+                symbol, entry_price, quantity, action, min_profit_pct=0.50
             )
             
             with self.positions_lock:
@@ -95,7 +97,7 @@ class RealTimePriceMonitor:
         entry_price: float,
         quantity: float,
         action: str,
-        min_profit_pct: float = 0.05  # 0.05% minimum profit after fees
+        min_profit_pct: float = 0.50  # 0.50% minimum gross profit (ensures net > 0.30% after costs)
     ) -> float:
         """
         Calculate price where fees are covered + minimum profit achieved
@@ -272,11 +274,29 @@ class RealTimePriceMonitor:
                                 'position_info': position_info
                             })
                         elif breakeven_profit_reached:
-                            # Fees covered + small profit achieved
+                            # CRITICAL FIX: Only close if actual net profit > 0.30% (after all costs)
+                            # Calculate actual net profit at current price
+                            from utils.profit_calculator import ProfitCalculator
+                            profit_calc = ProfitCalculator(exchange='bybit')
+                            
+                            gross_profit_pct = ((current_price - entry_price) / entry_price * 100.0) if action == 'BUY' else ((entry_price - current_price) / entry_price * 100.0)
+                            
+                            # Estimate costs (fees 0.13% + slippage ~0.10% + spread ~0.03% = ~0.26%)
+                            estimated_costs_pct = 0.26
+                            estimated_net_profit_pct = gross_profit_pct - estimated_costs_pct
+                            
+                            # Only close if net profit > 0.30% (actual profit after all costs)
+                            if estimated_net_profit_pct < 0.30:
+                                # Not enough profit yet - wait for target or better price
+                                if check_count % 60 == 0:
+                                    logger.debug(f"[MONITOR] {symbol} Breakeven reached but net profit {estimated_net_profit_pct:.2f}% < 0.30% minimum - waiting...")
+                                continue  # Skip closing, wait for better price
+                            
+                            # Fees covered + MINIMUM profit achieved (net > 0.30%)
                             # Check if partial profit taking enabled
                             if position_info.get('partial_profit_enabled', False):
                                 # PARTIAL CLOSE: Close fees amount, keep rest for target
-                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) FEES COVERED! Partial close at ${current_price:.2f} (Breakeven: ${breakeven_price:.2f})")
+                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) MIN PROFIT REACHED! Net: {estimated_net_profit_pct:.2f}% - Partial close at ${current_price:.2f}")
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
@@ -286,12 +306,17 @@ class RealTimePriceMonitor:
                                     'position_info': position_info
                                 })
                             else:
-                                # FULL CLOSE: Old behavior (close everything)
-                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) BREAKEVEN+PROFIT REACHED! Full close at ${current_price:.2f}")
+                                # FULL CLOSE: Only if net profit > 0.30%
+                                logger.info(f"[MONITOR] {symbol} ({strategy_safe}) MIN PROFIT REACHED! Net: {estimated_net_profit_pct:.2f}% - Closing at ${current_price:.2f}")
                                 self.price_updates.put({
                                     'key': key,
                                     'symbol': symbol,
                                     'strategy': position_info.get('strategy', 'unknown'),
+                                    'signal': 'BREAKEVEN_PROFIT',
+                                    'current_price': current_price,
+                                    'position_info': position_info
+                                })
+                            # Skip old behavior (removed duplicate code)
                                     'signal': 'BREAKEVEN_PROFIT',
                                     'current_price': current_price,
                                     'position_info': position_info

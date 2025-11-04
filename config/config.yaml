@@ -87,7 +87,7 @@ strategies:
   
   micro_scalp:
     enabled: true              # STRATEGY-1: Micro-Scalp Profit System (FIXED - exit costs accounted)
-    confidence_threshold: 28.0 # BALANCED entry (quality trades but not impossible) - REDUCED from 32.0 to allow trades
+    confidence_threshold: 25.0 # RELAXED entry (allow more trades - user frustrated with 1 trade in 48h) - REDUCED from 28.0
     max_hold_time_minutes: 15  # 15 min timeout (faster exits = lower risk) - reduced from 20
     stop_loss_pct: 0.70        # -0.70% stop loss (with 0.15% buffer = -0.85% effective) - INCREASED from 0.55%
     take_profit_pct: 1.20      # +1.20% target (risk/reward 1:1.7) - INCREASED from 1.10% to compensate for wider stop
