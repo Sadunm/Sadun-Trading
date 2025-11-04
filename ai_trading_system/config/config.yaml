@@ -1,0 +1,143 @@
+# Multi-Strategy AI Trading System Configuration
+
+# OpenRouter API Configuration
+openrouter:
+  api_key: "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"
+  base_url: "https://openrouter.ai/api/v1"
+  default_model: "deepseek/deepseek-chat"
+  models:
+    risk_filter: "deepseek/deepseek-chat"
+    news_check: "qwen/qwen-2.5-72b-instruct"
+    anomaly_detection: "meta-llama/llama-3.3-70b-instruct"
+  timeout: 30.0
+  max_retries: 3
+
+# Exchange Configuration
+exchange:
+  name: "bybit"  # bybit or binance
+  testnet: true
+  trading_type: "spot"
+  api_key: "${BYBIT_API_KEY}"
+  api_secret: "${BYBIT_API_SECRET}"
+  websocket_url:
+    bybit: "wss://stream-testnet.bybit.com/v5/public/spot"
+    binance: "wss://testnet.binance.vision/ws/stream"
+
+# Trading Configuration
+trading:
+  initial_capital: 100.0
+  paper_trading: true
+  max_position_size_pct: 1.0  # Max 1% risk per trade
+  max_portfolio_risk_pct: 20.0  # Max 20% total risk
+  max_leverage: 1.0  # Spot = 1.0
+
+# Strategy Configuration
+strategies:
+  momentum:
+    enabled: true
+    timeframe: "5m"
+    lookback_periods: 20
+    min_confidence: 0.6
+    max_position_pct: 0.2
+  
+  mean_reversion:
+    enabled: true
+    timeframe: "5m"
+    z_score_threshold: 2.0
+    min_confidence: 0.65
+    max_position_pct: 0.15
+  
+  breakout:
+    enabled: true
+    timeframe: "5m"
+    atr_multiplier: 2.0
+    min_confidence: 0.7
+    max_position_pct: 0.2
+  
+  trend_following:
+    enabled: true
+    timeframe: "5m"
+    forecast_horizons: [1, 4, 12, 24]
+    min_confidence: 0.75
+    max_position_pct: 0.25
+  
+  meta_ai:
+    enabled: true
+    risk_check_enabled: true
+    news_check_enabled: true
+    anomaly_check_enabled: true
+    min_ai_confidence: 0.7
+
+# Risk Management
+risk:
+  max_drawdown_pct: 5.0
+  max_daily_loss_pct: 2.0
+  max_daily_trades: 100
+  stop_loss_pct: 0.5
+  take_profit_pct: 1.0
+  volatility_target: 0.15
+
+# Execution
+execution:
+  order_slicing: "TWAP"  # TWAP or VWAP
+  slice_duration_seconds: 60
+  max_slippage_pct: 0.1
+  min_spread_pct: 0.02
+  order_idempotency: true
+  retry_failed_orders: true
+  max_retries: 3
+
+# Data
+data:
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+    - SOLUSDT
+    - XRPUSDT
+    - ADAUSDT
+    - DOGEUSDT
+    - AVAXUSDT
+    - LINKUSDT
+    - MATICUSDT
+  kline_interval: "5m"
+  kline_limit: 200
+  orderbook_depth: 20
+  store_local: true
+  data_dir: "ai_trading_system/data/storage"
+
+# ML Models
+models:
+  momentum:
+    model_type: "lightgbm"
+    train_interval_hours: 24
+    retrain_threshold: 0.05  # Retrain if performance drops 5%
+  
+  trend_following:
+    model_type: "tft"  # Temporal Fusion Transformer
+    sequence_length: 60
+    forecast_horizon: 24
+    train_interval_hours: 48
+  
+  mean_reversion:
+    model_type: "lightgbm"
+    train_interval_hours: 24
+
+# Logging
+logging:
+  level: "INFO"
+  file: "ai_trading_system/logs/ai_trading.log"
+  json_logs: true
+  log_trades: true
+  log_signals: true
+  log_errors: true
+  log_latency: true
+
+# Backtesting
+backtesting:
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+  initial_capital: 10000.0
+  commission: 0.001  # 0.1%
+  slippage: 0.0005  # 0.05%
+
