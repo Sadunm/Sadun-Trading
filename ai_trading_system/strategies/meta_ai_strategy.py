@@ -23,9 +23,13 @@ class MetaAIStrategy(BaseStrategy):
         self.anomaly_check_enabled = config.get('anomaly_check_enabled', True)
         
         # Initialize OpenRouter client
-        from utils.config_loader import get_config
         try:
-            config_obj = get_config()
+            # Load config from YAML
+            import yaml
+            import os
+            config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml')
+            with open(config_path, 'r') as f:
+                config_obj = yaml.safe_load(f)
             openrouter_config = config_obj.get('openrouter', {})
             api_key = openrouter_config.get('api_key')
             

@@ -1,0 +1,298 @@
+"""
+Main Trading Bot Orchestrator - Multi-Strategy AI System
+"""
+import asyncio
+import sys
+import os
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from data.data_manager import DataManager
+from features.indicators import IndicatorCalculator
+from strategies.momentum_strategy import MomentumStrategy
+from strategies.mean_reversion_strategy import MeanReversionStrategy
+from strategies.breakout_strategy import BreakoutStrategy
+from strategies.trend_following_strategy import TrendFollowingStrategy
+from strategies.meta_ai_strategy import MetaAIStrategy
+from allocator.position_allocator import PositionAllocator
+from risk.risk_manager import RiskManager
+from execution.order_executor import OrderExecutor
+from utils.openrouter_client import OpenRouterClient
+from utils.logger import setup_logger
+import yaml
+
+logger = setup_logger("main_bot")
+
+
+class AITradingBot:
+    """Main AI Trading Bot"""
+    
+    def __init__(self, config_path: str = "ai_trading_system/config/config.yaml"):
+        # Load config
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+        
+        # Initialize components
+        self.data_manager = None
+        self.strategies = {}
+        self.allocator = None
+        self.risk_manager = None
+        self.order_executor = None
+        self.meta_ai = None
+        
+        # State
+        self.running = False
+        self.capital = self.config.get('trading', {}).get('initial_capital', 100.0)
+        self.positions = []
+        
+    async def initialize(self):
+        """Initialize all components"""
+        logger.info("[INIT] Initializing AI Trading Bot...")
+        
+        try:
+            # 1. Data Manager
+            exchange = self.config.get('exchange', {}).get('name', 'bybit')
+            symbols = self.config.get('data', {}).get('symbols', [])
+            websocket_url = self.config.get('exchange', {}).get('websocket_url', {}).get(exchange)
+            
+            self.data_manager = DataManager(
+                exchange=exchange,
+                symbols=symbols,
+                websocket_url=websocket_url,
+                store_local=self.config.get('data', {}).get('store_local', True),
+                data_dir=self.config.get('data', {}).get('data_dir', 'ai_trading_system/data/storage')
+            )
+            
+            # 2. Strategies
+            strategy_configs = self.config.get('strategies', {})
+            
+            if strategy_configs.get('momentum', {}).get('enabled', True):
+                self.strategies['momentum'] = MomentumStrategy('momentum', strategy_configs.get('momentum', {}))
+            
+            if strategy_configs.get('mean_reversion', {}).get('enabled', True):
+                self.strategies['mean_reversion'] = MeanReversionStrategy('mean_reversion', strategy_configs.get('mean_reversion', {}))
+            
+            if strategy_configs.get('breakout', {}).get('enabled', True):
+                self.strategies['breakout'] = BreakoutStrategy('breakout', strategy_configs.get('breakout', {}))
+            
+            if strategy_configs.get('trend_following', {}).get('enabled', True):
+                self.strategies['trend_following'] = TrendFollowingStrategy('trend_following', strategy_configs.get('trend_following', {}))
+            
+            if strategy_configs.get('meta_ai', {}).get('enabled', True):
+                self.meta_ai = MetaAIStrategy('meta_ai', strategy_configs.get('meta_ai', {}))
+            
+            logger.info(f"[INIT] Initialized {len(self.strategies)} strategies")
+            
+            # 3. Allocator
+            self.allocator = PositionAllocator(self.config)
+            
+            # 4. Risk Manager
+            self.risk_manager = RiskManager(self.config)
+            self.risk_manager.initialize(self.capital)
+            
+            # 5. Order Executor
+            # Note: In production, pass actual API client
+            self.order_executor = OrderExecutor(self.config, api_client=None)
+            
+            logger.info("[INIT] All components initialized")
+            
+        except Exception as e:
+            logger.error(f"[ERROR] Initialization failed: {e}", exc_info=True)
+            raise
+    
+    async def start(self):
+        """Start trading bot"""
+        logger.info("[START] Starting AI Trading Bot...")
+        
+        try:
+            # Start data manager
+            await self.data_manager.start()
+            
+            self.running = True
+            
+            # Main trading loop
+            await self._trading_loop()
+            
+        except KeyboardInterrupt:
+            logger.info("[STOP] Bot stopped by user")
+        except Exception as e:
+            logger.error(f"[ERROR] Bot error: {e}", exc_info=True)
+        finally:
+            await self.stop()
+    
+    async def _trading_loop(self):
+        """Main trading loop"""
+        logger.info("[LOOP] Starting trading loop...")
+        
+        while self.running:
+            try:
+                # Process each symbol
+                symbols = self.config.get('data', {}).get('symbols', [])
+                
+                for symbol in symbols:
+                    await self._process_symbol(symbol)
+                
+                # Wait before next iteration
+                await asyncio.sleep(30)  # 30 second intervals
+                
+            except Exception as e:
+                logger.error(f"[ERROR] Error in trading loop: {e}", exc_info=True)
+                await asyncio.sleep(5)
+    
+    async def _process_symbol(self, symbol: str):
+        """Process a single symbol"""
+        try:
+            # Get market data
+            ohlcv_data = self.data_manager.get_ohlcv(symbol, limit=200)
+            
+            if len(ohlcv_data) < 50:
+                logger.warning(f"[WARN] Insufficient data for {symbol}")
+                return
+            
+            # Build features
+            features = IndicatorCalculator.build_features(ohlcv_data)
+            
+            if not features:
+                return
+            
+            # Get current price
+            current_price = self.data_manager.get_current_price(symbol)
+            if not current_price:
+                return
+            
+            # Generate signals from all strategies
+            signals = []
+            
+            for strategy_name, strategy in self.strategies.items():
+                try:
+                    signal = strategy.generate_signal(
+                        symbol=symbol,
+                        features=features,
+                        current_price=current_price
+                    )
+                    
+                    if signal and strategy.validate_signal(signal):
+                        signal['symbol'] = symbol
+                        signal['strategy'] = strategy_name
+                        signals.append(signal)
+                        
+                except Exception as e:
+                    logger.error(f"[ERROR] Error in {strategy_name} for {symbol}: {e}")
+            
+            # Meta AI validation
+            if self.meta_ai and signals:
+                validated_signals = []
+                for signal in signals:
+                    validation = self.meta_ai.validate_signal(
+                        signal=signal,
+                        symbol=symbol,
+                        features=features,
+                        current_price=current_price
+                    )
+                    
+                    if validation.get('approved', True):
+                        # Update confidence with AI validation
+                        signal['confidence'] = validation.get('confidence', signal.get('confidence', 0.0))
+                        validated_signals.append(signal)
+                    else:
+                        logger.info(f"[FILTER] {symbol} {signal.get('strategy')} rejected by AI: {validation.get('warnings', [])}")
+                
+                signals = validated_signals
+            
+            # Allocate positions
+            if signals:
+                allocated = self.allocator.allocate(
+                    signals=signals,
+                    capital=self.capital,
+                    current_positions=self.positions
+                )
+                
+                # Execute positions
+                for position in allocated:
+                    await self._execute_position(position)
+            
+        except Exception as e:
+            logger.error(f"[ERROR] Error processing {symbol}: {e}", exc_info=True)
+    
+    async def _execute_position(self, position: Dict[str, Any]):
+        """Execute a position"""
+        try:
+            symbol = position.get('symbol')
+            action = position.get('action')
+            quantity = position.get('position_size', 0)
+            entry_price = position.get('entry_price', 0)
+            
+            # Risk check
+            can_open, reason = self.risk_manager.can_open_position(
+                position_size=quantity,
+                entry_price=entry_price,
+                stop_loss=position.get('stop_loss', 0),
+                current_positions=self.positions
+            )
+            
+            if not can_open:
+                logger.info(f"[RISK] Position rejected: {reason}")
+                return
+            
+            # Generate order ID
+            import time
+            order_id = self.order_executor.generate_order_id(symbol, action, time.time())
+            
+            # Execute order
+            result = await self.order_executor.execute_order(
+                symbol=symbol,
+                action=action,
+                quantity=quantity,
+                entry_price=entry_price,
+                order_id=order_id
+            )
+            
+            if result.get('success'):
+                # Add position
+                self.positions.append({
+                    **position,
+                    'order_id': order_id,
+                    'executed_price': result.get('executed_price'),
+                    'executed_quantity': result.get('executed_quantity'),
+                    'status': 'OPEN'
+                })
+                
+                logger.info(f"[EXEC] Opened {action} position: {symbol} {quantity} @ {result.get('executed_price')}")
+            else:
+                logger.warning(f"[WARN] Order failed: {result.get('error')}")
+                
+        except Exception as e:
+            logger.error(f"[ERROR] Error executing position: {e}", exc_info=True)
+    
+    async def stop(self):
+        """Stop trading bot"""
+        logger.info("[STOP] Stopping bot...")
+        self.running = False
+        
+        if self.data_manager:
+            await self.data_manager.stop()
+        
+        logger.info("[STOP] Bot stopped")
+
+
+async def main():
+    """Main entry point"""
+    logger.info("=" * 60)
+    logger.info("🚀 Multi-Strategy AI Trading Bot")
+    logger.info("=" * 60)
+    
+    bot = AITradingBot()
+    
+    try:
+        await bot.initialize()
+        await bot.start()
+    except Exception as e:
+        logger.error(f"[ERROR] Fatal error: {e}", exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+

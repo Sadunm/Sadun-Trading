@@ -6,6 +6,11 @@ import time
 from typing import Dict, Any, Optional, List
 from utils.logger import setup_logger
 
+# Import path fix
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 logger = setup_logger("openrouter_client")
 
 
