@@ -316,11 +316,7 @@ class RealTimePriceMonitor:
                                     'current_price': current_price,
                                     'position_info': position_info
                                 })
-                            # Skip old behavior (removed duplicate code)
-                                    'signal': 'BREAKEVEN_PROFIT',
-                                    'current_price': current_price,
-                                    'position_info': position_info
-                                })
+                            # Old duplicate code removed
                         elif stop_hit:
                             logger.warning(f"[MONITOR] {symbol} ({strategy_safe}) STOP LOSS HIT! Price: ${current_price:.2f}")
                             self.price_updates.put({
