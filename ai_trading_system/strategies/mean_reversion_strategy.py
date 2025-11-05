@@ -42,12 +42,13 @@ class MeanReversionStrategy(BaseStrategy):
                 logger.warning(f"[WARN] Insufficient indicators for mean reversion")
                 return None
             
-            zscore_val = zscore[-1]
-            bb_upper_val = bb_upper[-1]
-            bb_lower_val = bb_lower[-1]
-            bb_middle_val = bb_middle[-1]
-            bb_pos = bb_position[-1] if bb_position else 0.5
-            rsi_val = rsi[-1] if rsi else 50.0
+            # Convert to float to avoid numpy array comparison ambiguity
+            zscore_val = float(zscore[-1]) if isinstance(zscore, (list, np.ndarray)) else float(zscore)
+            bb_upper_val = float(bb_upper[-1]) if isinstance(bb_upper, (list, np.ndarray)) else float(bb_upper)
+            bb_lower_val = float(bb_lower[-1]) if isinstance(bb_lower, (list, np.ndarray)) else float(bb_lower)
+            bb_middle_val = float(bb_middle[-1]) if isinstance(bb_middle, (list, np.ndarray)) else float(bb_middle)
+            bb_pos = float(bb_position[-1]) if bb_position and isinstance(bb_position, (list, np.ndarray)) else (float(bb_position) if bb_position else 0.5)
+            rsi_val = float(rsi[-1]) if rsi and isinstance(rsi, (list, np.ndarray)) else (float(rsi) if rsi else 50.0)
             
             # Entry conditions
             action = 'FLAT'

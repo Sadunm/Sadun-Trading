@@ -43,19 +43,19 @@ class BreakoutStrategy(BaseStrategy):
                 logger.warning(f"[WARN] Insufficient data for breakout strategy")
                 return None
             
-            # Calculate recent high/low
+            # Calculate recent high/low (convert to float)
             lookback = min(20, len(highs))
-            recent_high = max(highs[-lookback:])
-            recent_low = min(lows[-lookback:])
+            recent_high = float(max(highs[-lookback:])) if isinstance(highs, (list, np.ndarray)) else float(highs)
+            recent_low = float(min(lows[-lookback:])) if isinstance(lows, (list, np.ndarray)) else float(lows)
             
-            current_atr = atr[-1] if atr else 0.0
-            current_atr_pct = atr_pct[-1] if atr_pct else 0.5
-            current_vol = volume_ratio[-1] if volume_ratio else 1.0
-            current_volatility = volatility[-1] if volatility else 0.0
+            current_atr = float(atr[-1]) if atr and isinstance(atr, (list, np.ndarray)) else (float(atr) if atr else 0.0)
+            current_atr_pct = float(atr_pct[-1]) if atr_pct and isinstance(atr_pct, (list, np.ndarray)) else (float(atr_pct) if atr_pct else 0.5)
+            current_vol = float(volume_ratio[-1]) if volume_ratio and isinstance(volume_ratio, (list, np.ndarray)) else (float(volume_ratio) if volume_ratio else 1.0)
+            current_volatility = float(volatility[-1]) if volatility and isinstance(volatility, (list, np.ndarray)) else (float(volatility) if volatility else 0.0)
             
             # Volatility expansion check
             if len(volatility) >= 10:
-                avg_volatility = np.mean(volatility[-10:])
+                avg_volatility = float(np.mean(volatility[-10:]))
                 vol_expansion = current_volatility > avg_volatility * 1.5
             else:
                 vol_expansion = False

@@ -160,7 +160,7 @@ class MomentumStrategy(BaseStrategy):
     def _rule_based_signal(self, features: Dict[str, Any]) -> tuple:
         """Fallback rule-based signal"""
         try:
-            # Get latest values
+            # Get latest values (convert to float to avoid numpy array comparison issues)
             rsi = features.get('rsi', [])
             macd_hist = features.get('macd_histogram', [])
             momentum = features.get('momentum', [])
@@ -169,10 +169,11 @@ class MomentumStrategy(BaseStrategy):
             if not all([rsi, macd_hist, momentum, volume_ratio]):
                 return 'FLAT', 0.0
             
-            rsi_val = rsi[-1]
-            macd_val = macd_hist[-1]
-            mom_val = momentum[-1]
-            vol_val = volume_ratio[-1]
+            # Convert to float to avoid numpy array comparison ambiguity
+            rsi_val = float(rsi[-1]) if isinstance(rsi, (list, np.ndarray)) else float(rsi)
+            macd_val = float(macd_hist[-1]) if isinstance(macd_hist, (list, np.ndarray)) else float(macd_hist)
+            mom_val = float(momentum[-1]) if isinstance(momentum, (list, np.ndarray)) else float(momentum)
+            vol_val = float(volume_ratio[-1]) if isinstance(volume_ratio, (list, np.ndarray)) else float(volume_ratio)
             
             # Long signal
             if (rsi_val < 50 and macd_val > 0 and mom_val > 0 and vol_val > 1.2):

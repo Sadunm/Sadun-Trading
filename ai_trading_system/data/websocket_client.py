@@ -172,7 +172,8 @@ class MarketDataStream:
         elif self.exchange == "bybit":
             self.url = "wss://stream-testnet.bybit.com/v5/public/spot"
         elif self.exchange == "binance":
-            self.url = "wss://testnet.binance.vision/ws/stream" if not url else url
+            # Binance testnet WebSocket URL (correct format)
+            self.url = "wss://testnet.binance.vision/stream" if not url else url
         else:
             raise ValueError(f"Unsupported exchange: {exchange}")
         
