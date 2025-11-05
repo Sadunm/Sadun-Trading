@@ -2,7 +2,7 @@
 
 # OpenRouter API Configuration
 openrouter:
-  api_key: "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"
+  api_key: "${OPENROUTER_API_KEY}"  # Set via environment variable for security
   base_url: "https://openrouter.ai/api/v1"
   default_model: "deepseek/deepseek-chat"
   models:

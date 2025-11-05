@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: ai-trading-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+

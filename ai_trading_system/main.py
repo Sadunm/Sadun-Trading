@@ -78,7 +78,15 @@ class AITradingBot:
             raise FileNotFoundError(f"Config file not found: {config_path}")
         
         with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+            config_content = f.read()
+            # Replace environment variables in config
+            import re
+            env_pattern = r'\$\{([^}]+)\}'
+            def replace_env(match):
+                env_var = match.group(1)
+                return os.getenv(env_var, match.group(0))
+            config_content = re.sub(env_pattern, replace_env, config_content)
+            self.config = yaml.safe_load(config_content)
         
         # Initialize components
         self.data_manager = None
@@ -379,5 +387,13 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n[STOP] Bot stopped by user")
+    except Exception as e:
+        print(f"[ERROR] Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 

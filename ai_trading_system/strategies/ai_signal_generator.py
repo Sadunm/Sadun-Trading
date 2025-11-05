@@ -29,10 +29,22 @@ class AISignalGenerator:
                 )
             
             with open(config_path, 'r') as f:
-                config = yaml.safe_load(f)
+                config_content = f.read()
+                # Replace environment variables
+                import re
+                env_pattern = r'\$\{([^}]+)\}'
+                def replace_env(match):
+                    env_var = match.group(1)
+                    return os.getenv(env_var, match.group(0))
+                config_content = re.sub(env_pattern, replace_env, config_content)
+                config = yaml.safe_load(config_content)
             
             openrouter_config = config.get('openrouter', {})
             api_key = openrouter_config.get('api_key')
+            
+            # Fallback: try direct environment variable
+            if not api_key or api_key.startswith('${'):
+                api_key = os.getenv('OPENROUTER_API_KEY')
             
             if not api_key:
                 raise ValueError("OpenRouter API key not found in config")
