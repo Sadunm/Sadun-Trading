@@ -3,9 +3,9 @@ Meta AI Strategy - LLM Risk Filter
 This strategy does NOT generate signals, only filters and validates other strategies
 """
 from typing import Dict, Any, Optional, List
-from strategies.base_strategy import BaseStrategy
-from utils.openrouter_client import OpenRouterClient
-from utils.logger import setup_logger
+from .base_strategy import BaseStrategy
+from ..utils.openrouter_client import OpenRouterClient
+from ..utils.logger import setup_logger
 
 logger = setup_logger("meta_ai_strategy")
 

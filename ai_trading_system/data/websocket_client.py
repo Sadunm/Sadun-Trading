@@ -7,7 +7,7 @@ import websockets
 from typing import Dict, Any, List, Callable, Optional
 from datetime import datetime
 import time
-from utils.logger import setup_logger
+from ..utils.logger import setup_logger
 
 logger = setup_logger("websocket_client")
 

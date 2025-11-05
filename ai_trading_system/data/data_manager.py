@@ -7,8 +7,8 @@ import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
-from data.websocket_client import MarketDataStream
-from utils.logger import setup_logger
+from .websocket_client import MarketDataStream
+from ..utils.logger import setup_logger
 
 logger = setup_logger("data_manager")
 

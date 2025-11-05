@@ -3,10 +3,10 @@ Short-Term Momentum Strategy with LightGBM
 """
 import numpy as np
 from typing import Dict, Any, Optional
-from strategies.base_strategy import BaseStrategy
-from models.lightgbm_model import LightGBMModel
-from features.indicators import IndicatorCalculator
-from utils.logger import setup_logger
+from .base_strategy import BaseStrategy
+from ..models.lightgbm_model import LightGBMModel
+from ..features.indicators import IndicatorCalculator
+from ..utils.logger import setup_logger
 
 logger = setup_logger("momentum_strategy")
 

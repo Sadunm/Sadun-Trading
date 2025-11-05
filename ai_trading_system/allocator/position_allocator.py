@@ -3,7 +3,7 @@ Position Allocator - Meta-Strategy for Combining Strategy Signals
 """
 import numpy as np
 from typing import Dict, Any, List, Optional
-from utils.logger import setup_logger
+from ..utils.logger import setup_logger
 
 logger = setup_logger("position_allocator")
 

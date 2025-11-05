@@ -3,10 +3,10 @@ Trend Following Strategy with TFT Forecasting
 """
 import numpy as np
 from typing import Dict, Any, Optional
-from strategies.base_strategy import BaseStrategy
-from models.tft_model import TFTModel
-from features.indicators import IndicatorCalculator
-from utils.logger import setup_logger
+from .base_strategy import BaseStrategy
+from ..models.tft_model import TFTModel
+from ..features.indicators import IndicatorCalculator
+from ..utils.logger import setup_logger
 
 logger = setup_logger("trend_following_strategy")
 

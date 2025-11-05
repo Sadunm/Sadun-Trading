@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
-from utils.logger import setup_logger
+from ..utils.logger import setup_logger
 
 logger = setup_logger("order_executor")
 

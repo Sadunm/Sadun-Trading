@@ -4,12 +4,27 @@ OpenRouter API Client for AI Risk Filtering
 import requests
 import time
 from typing import Dict, Any, Optional, List
-from utils.logger import setup_logger
-
-# Import path fix
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Import logger - try local first, then parent
+try:
+    from utils.logger import setup_logger
+except ImportError:
+    # Fallback to parent logger
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    try:
+        from utils.logger import setup_logger
+    except ImportError:
+        # Last resort - simple logger
+        import logging
+        def setup_logger(name):
+            logger = logging.getLogger(name)
+            logger.setLevel(logging.INFO)
+            if not logger.handlers:
+                handler = logging.StreamHandler()
+                handler.setFormatter(logging.Formatter('%(name)s - %(levelname)s - %(message)s'))
+                logger.addHandler(handler)
+            return logger
 
 logger = setup_logger("openrouter_client")
 

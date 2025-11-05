@@ -3,9 +3,9 @@ Mean Reversion Strategy with Z-Score and Bollinger Bands
 """
 import numpy as np
 from typing import Dict, Any, Optional
-from strategies.base_strategy import BaseStrategy
-from features.indicators import IndicatorCalculator
-from utils.logger import setup_logger
+from .base_strategy import BaseStrategy
+from ..features.indicators import IndicatorCalculator
+from ..utils.logger import setup_logger
 
 logger = setup_logger("mean_reversion_strategy")
 

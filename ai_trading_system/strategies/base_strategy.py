@@ -3,7 +3,7 @@ Base Strategy Class
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
-from utils.logger import setup_logger
+from ..utils.logger import setup_logger
 
 logger = setup_logger("base_strategy")
 

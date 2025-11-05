@@ -6,7 +6,7 @@ import pandas as pd
 from typing import Dict, Any, List, Optional, Tuple
 import os
 from datetime import datetime
-from utils.logger import setup_logger
+from ..utils.logger import setup_logger
 
 logger = setup_logger("tft_model")
 

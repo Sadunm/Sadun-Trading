@@ -5,23 +5,56 @@ import asyncio
 import sys
 import os
 from pathlib import Path
+from typing import Dict, Any
 
 # Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+script_dir = Path(__file__).parent
+trading_bot_dir = script_dir.parent
+sys.path.insert(0, str(trading_bot_dir))
 
-from data.data_manager import DataManager
-from features.indicators import IndicatorCalculator
-from strategies.momentum_strategy import MomentumStrategy
-from strategies.mean_reversion_strategy import MeanReversionStrategy
-from strategies.breakout_strategy import BreakoutStrategy
-from strategies.trend_following_strategy import TrendFollowingStrategy
-from strategies.meta_ai_strategy import MetaAIStrategy
-from allocator.position_allocator import PositionAllocator
-from risk.risk_manager import RiskManager
-from execution.order_executor import OrderExecutor
-from utils.openrouter_client import OpenRouterClient
-from utils.logger import setup_logger
+# Import from ai_trading_system package
+from ai_trading_system.data.data_manager import DataManager
+from ai_trading_system.features.indicators import IndicatorCalculator
+from ai_trading_system.strategies.momentum_strategy import MomentumStrategy
+from ai_trading_system.strategies.mean_reversion_strategy import MeanReversionStrategy
+from ai_trading_system.strategies.breakout_strategy import BreakoutStrategy
+from ai_trading_system.strategies.trend_following_strategy import TrendFollowingStrategy
+from ai_trading_system.strategies.meta_ai_strategy import MetaAIStrategy
+from ai_trading_system.allocator.position_allocator import PositionAllocator
+from ai_trading_system.risk.risk_manager import RiskManager
+from ai_trading_system.execution.order_executor import OrderExecutor
+from ai_trading_system.utils.openrouter_client import OpenRouterClient
 import yaml
+import logging
+import os
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+
+# Import logger from parent utils
+sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from utils.logger import setup_logger
+except ImportError:
+    # Fallback logger setup
+    def setup_logger(name="bot", log_level="INFO"):
+        os.makedirs('logs', exist_ok=True)
+        logger = logging.getLogger(name)
+        logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+        logger.handlers.clear()
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+        log_filename = f"logs/ai_bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        file_handler = RotatingFileHandler(log_filename, maxBytes=10*1024*1024, backupCount=3, encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        return logger
 
 logger = setup_logger("main_bot")
 
@@ -29,8 +62,21 @@ logger = setup_logger("main_bot")
 class AITradingBot:
     """Main AI Trading Bot"""
     
-    def __init__(self, config_path: str = "ai_trading_system/config/config.yaml"):
+    def __init__(self, config_path: str = None):
+        # Determine config path
+        if config_path is None:
+            # Try relative to script location
+            script_dir = Path(__file__).parent
+            config_path = script_dir / "config" / "config.yaml"
+            if not config_path.exists():
+                # Try parent directory
+                config_path = script_dir.parent / "ai_trading_system" / "config" / "config.yaml"
+        
         # Load config
+        config_path = Path(config_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         

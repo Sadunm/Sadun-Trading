@@ -4,7 +4,7 @@ Technical Indicators and Feature Engineering
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, List, Optional
-from utils.logger import setup_logger
+from ..utils.logger import setup_logger
 
 logger = setup_logger("indicators")
 
