@@ -31,9 +31,14 @@ class DataManager:
         self.store_local = store_local
         self.data_dir = Path(data_dir)
         
-        # Create data directory
+        # Create data directory (with error handling for Render)
         if self.store_local:
-            self.data_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                self.data_dir.mkdir(parents=True, exist_ok=True)
+            except (OSError, PermissionError) as e:
+                # If can't create directory, disable local storage
+                logger.warning(f"[WARN] Cannot create data directory {self.data_dir}: {e}. Disabling local storage.")
+                self.store_local = False
         
         # Market data stream
         self.market_stream = MarketDataStream(

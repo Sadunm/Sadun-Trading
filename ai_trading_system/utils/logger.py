@@ -57,10 +57,6 @@ class SafeConsoleHandler(logging.StreamHandler):
 
 def setup_logger(name="bot", log_level="INFO"):
     """Setup comprehensive logging system"""
-    # Create logs directory
-    log_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    
     # Create logger
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
@@ -72,23 +68,50 @@ def setup_logger(name="bot", log_level="INFO"):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # Console handler
+    # Console handler (always works)
     console_handler = SafeConsoleHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     
-    # File handler
-    log_filename = os.path.join(log_dir, f"ai_bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
-    file_handler = RotatingFileHandler(
-        log_filename,
-        maxBytes=10 * 1024 * 1024,
-        backupCount=3,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    # File handler (only if directory is writable)
+    try:
+        # Try multiple possible log directories
+        log_dirs = [
+            os.path.join(os.path.dirname(__file__), '..', '..', 'logs'),
+            os.path.join(os.getcwd(), 'logs'),
+            '/tmp/logs',  # Render/Linux fallback
+            os.path.expanduser('~/logs')  # User home fallback
+        ]
+        
+        log_dir = None
+        for dir_path in log_dirs:
+            try:
+                os.makedirs(dir_path, exist_ok=True)
+                # Test write
+                test_file = os.path.join(dir_path, '.test_write')
+                with open(test_file, 'w') as f:
+                    f.write('test')
+                os.remove(test_file)
+                log_dir = dir_path
+                break
+            except (OSError, PermissionError):
+                continue
+        
+        if log_dir:
+            log_filename = os.path.join(log_dir, f"ai_bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+            file_handler = RotatingFileHandler(
+                log_filename,
+                maxBytes=10 * 1024 * 1024,
+                backupCount=3,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+    except Exception as e:
+        # If file logging fails, continue with console only
+        logger.warning(f"Could not setup file logging: {e}, using console only")
     
     return logger
 

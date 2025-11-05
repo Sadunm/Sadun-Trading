@@ -27,22 +27,47 @@ class MetaAIStrategy(BaseStrategy):
             # Load config from YAML
             import yaml
             import os
-            config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml')
-            with open(config_path, 'r') as f:
-                config_obj = yaml.safe_load(f)
-            openrouter_config = config_obj.get('openrouter', {})
-            api_key = openrouter_config.get('api_key')
+            import re
+            from pathlib import Path
             
-            if api_key:
+            config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
+            if not config_path.exists():
+                # Try alternative path
+                config_path = Path(__file__).parent.parent.parent / 'ai_trading_system' / 'config' / 'config.yaml'
+            
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_content = f.read()
+                    # Replace environment variables
+                    env_pattern = r'\$\{([^}]+)\}'
+                    def replace_env(match):
+                        env_var = match.group(1)
+                        return os.getenv(env_var, match.group(0))
+                    config_content = re.sub(env_pattern, replace_env, config_content)
+                    config_obj = yaml.safe_load(config_content)
+                
+                openrouter_config = config_obj.get('openrouter', {})
+                api_key = openrouter_config.get('api_key')
+                
+                # Fallback: try direct environment variable
+                if not api_key or api_key.startswith('${'):
+                    api_key = os.getenv('OPENROUTER_API_KEY')
+            else:
+                # Try direct environment variable
+                api_key = os.getenv('OPENROUTER_API_KEY')
+                openrouter_config = {'base_url': 'https://openrouter.ai/api/v1'}
+            
+            if api_key and api_key != '${OPENROUTER_API_KEY}':
                 self.ai_client = OpenRouterClient(
                     api_key=api_key,
                     base_url=openrouter_config.get('base_url', 'https://openrouter.ai/api/v1')
                 )
+                logger.info("[AI] Meta AI client initialized")
             else:
                 logger.warning("[WARN] OpenRouter API key not found, AI filtering disabled")
                 self.ai_client = None
         except Exception as e:
-            logger.error(f"[ERROR] Failed to initialize AI client: {e}")
+            logger.error(f"[ERROR] Failed to initialize AI client: {e}", exc_info=True)
             self.ai_client = None
     
     def generate_signal(

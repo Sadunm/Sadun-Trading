@@ -77,16 +77,25 @@ class AITradingBot:
         if not config_path.exists():
             raise FileNotFoundError(f"Config file not found: {config_path}")
         
-        with open(config_path, 'r') as f:
-            config_content = f.read()
-            # Replace environment variables in config
-            import re
-            env_pattern = r'\$\{([^}]+)\}'
-            def replace_env(match):
-                env_var = match.group(1)
-                return os.getenv(env_var, match.group(0))
-            config_content = re.sub(env_pattern, replace_env, config_content)
-            self.config = yaml.safe_load(config_content)
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_content = f.read()
+                # Replace environment variables in config
+                import re
+                env_pattern = r'\$\{([^}]+)\}'
+                def replace_env(match):
+                    env_var = match.group(1)
+                    env_value = os.getenv(env_var)
+                    if env_value is None:
+                        # If env var not set, try to use default or warn
+                        logger.warning(f"[WARN] Environment variable {env_var} not set, using placeholder")
+                        return match.group(0)  # Keep placeholder
+                    return env_value
+                config_content = re.sub(env_pattern, replace_env, config_content)
+                self.config = yaml.safe_load(config_content)
+        except Exception as e:
+            logger.error(f"[ERROR] Failed to load config: {e}")
+            raise
         
         # Initialize components
         self.data_manager = None
@@ -104,6 +113,8 @@ class AITradingBot:
     async def initialize(self):
         """Initialize all components"""
         logger.info("[INIT] Initializing AI Trading Bot...")
+        logger.info(f"[INIT] Working directory: {os.getcwd()}")
+        logger.info(f"[INIT] Python version: {sys.version}")
         
         try:
             # 1. Data Manager
@@ -154,7 +165,8 @@ class AITradingBot:
             
         except Exception as e:
             logger.error(f"[ERROR] Initialization failed: {e}", exc_info=True)
-            raise
+            # Don't raise - try to continue with partial initialization
+            logger.warning("[WARN] Continuing with partial initialization. Some features may not work.")
     
     async def start(self):
         """Start trading bot"""
@@ -230,26 +242,33 @@ class AITradingBot:
             
             # 1. AI Signal Generator (PRIMARY - uses DeepSeek to generate signals)
             try:
-                from ..strategies.ai_signal_generator import AISignalGenerator
+                # Lazy import to avoid circular dependencies
                 if not hasattr(self, 'ai_generator'):
-                    self.ai_generator = AISignalGenerator()
+                    try:
+                        from ai_trading_system.strategies.ai_signal_generator import AISignalGenerator
+                        self.ai_generator = AISignalGenerator()
+                        logger.info("[AI] Signal generator initialized")
+                    except Exception as e:
+                        logger.warning(f"[WARN] Failed to initialize AI generator: {e}. Continuing without AI signals.")
+                        self.ai_generator = None
                 
-                ai_signal = self.ai_generator.generate_signal(
-                    symbol=symbol,
-                    features=features,
-                    current_price=current_price,
-                    ohlcv_data=ohlcv_data
-                )
-                
-                if ai_signal and ai_signal.get('action') != 'FLAT':
-                    ai_signal['symbol'] = symbol
-                    ai_signal['strategy'] = 'ai_generator'
-                    signals.append(ai_signal)
-                    logger.info(f"[AI] Generated signal for {symbol}: {ai_signal.get('action')} "
-                               f"(confidence: {ai_signal.get('confidence', 0):.2%})")
+                if self.ai_generator:
+                    ai_signal = self.ai_generator.generate_signal(
+                        symbol=symbol,
+                        features=features,
+                        current_price=current_price,
+                        ohlcv_data=ohlcv_data
+                    )
+                    
+                    if ai_signal and ai_signal.get('action') != 'FLAT':
+                        ai_signal['symbol'] = symbol
+                        ai_signal['strategy'] = 'ai_generator'
+                        signals.append(ai_signal)
+                        logger.info(f"[AI] Generated signal for {symbol}: {ai_signal.get('action')} "
+                                   f"(confidence: {ai_signal.get('confidence', 0):.2%})")
                     
             except Exception as e:
-                logger.error(f"[ERROR] Error in AI signal generation for {symbol}: {e}")
+                logger.error(f"[ERROR] Error in AI signal generation for {symbol}: {e}", exc_info=True)
             
             # 2. Rule-based strategies (SECONDARY - fallback)
             for strategy_name, strategy in self.strategies.items():
