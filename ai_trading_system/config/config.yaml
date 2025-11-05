@@ -14,11 +14,11 @@ openrouter:
 
 # Exchange Configuration
 exchange:
-  name: "bybit"  # bybit or binance
+  name: "binance"  # bybit or binance (currently using binance - existing setup)
   testnet: true
   trading_type: "spot"
-  api_key: "${BYBIT_API_KEY}"
-  api_secret: "${BYBIT_API_SECRET}"
+  api_key: "${BINANCE_API_KEY}"
+  api_secret: "${BINANCE_API_SECRET}"
   websocket_url:
     bybit: "wss://stream-testnet.bybit.com/v5/public/spot"
     binance: "wss://testnet.binance.vision/ws/stream"

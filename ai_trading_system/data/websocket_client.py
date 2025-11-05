@@ -58,8 +58,15 @@ class WebSocketClient:
                     "op": "subscribe",
                     "args": channels
                 }
+            elif "binance" in self.url.lower():
+                # Binance format (matching existing bot)
+                subscribe_msg = {
+                    "method": "SUBSCRIBE",
+                    "params": channels,
+                    "id": 1
+                }
             else:
-                # Binance format
+                logger.warning(f"[WARN] Unknown exchange URL format: {self.url}")
                 subscribe_msg = {
                     "method": "SUBSCRIBE",
                     "params": channels,
@@ -165,7 +172,7 @@ class MarketDataStream:
         elif self.exchange == "bybit":
             self.url = "wss://stream-testnet.bybit.com/v5/public/spot"
         elif self.exchange == "binance":
-            self.url = "wss://testnet.binance.vision/stream"
+            self.url = "wss://testnet.binance.vision/ws/stream" if not url else url
         else:
             raise ValueError(f"Unsupported exchange: {exchange}")
         
@@ -184,14 +191,15 @@ class MarketDataStream:
             for symbol in self.symbols:
                 channels.append(f"kline.5.{symbol}")
                 channels.append(f"orderbook.20.{symbol}")
-        else:
-            # Binance channels
-            streams = []
+        elif self.exchange == "binance":
+            # Binance channels (matching existing bot format)
             for symbol in self.symbols:
                 symbol_lower = symbol.lower()
-                streams.append(f"{symbol_lower}@kline_5m")
-                streams.append(f"{symbol_lower}@depth20@100ms")
-            channels = streams
+                channels.append(f"{symbol_lower}@kline_5m")
+                channels.append(f"{symbol_lower}@depth20@100ms")
+        else:
+            logger.warning(f"[WARN] Unsupported exchange: {self.exchange}")
+            channels = []
         
         # Create WebSocket client
         self.websocket_client = WebSocketClient(
@@ -239,8 +247,8 @@ class MarketDataStream:
                             'timestamp': time.time()
                         }
             
-            else:
-                # Binance format
+            elif self.exchange == "binance":
+                # Binance format (matching existing bot)
                 stream = message.get('stream', '')
                 data = message.get('data', {})
                 
@@ -248,7 +256,16 @@ class MarketDataStream:
                     kline = data.get('k', {})
                     symbol = kline.get('s')
                     if symbol:
-                        self._update_ohlcv(symbol, kline)
+                        # Convert Binance kline format to standard
+                        candle_data = {
+                            't': kline.get('t'),  # Open time
+                            'o': kline.get('o'),  # Open
+                            'h': kline.get('h'),  # High
+                            'l': kline.get('l'),  # Low
+                            'c': kline.get('c'),  # Close
+                            'v': kline.get('v')   # Volume
+                        }
+                        self._update_ohlcv(symbol, candle_data)
                 
                 elif 'depth' in stream:
                     symbol = data.get('s')
@@ -284,8 +301,8 @@ class MarketDataStream:
                 'close': float(candle_data.get('close', 0)),
                 'volume': float(candle_data.get('volume', 0))
             }
-        else:
-            # Binance
+        elif self.exchange == "binance":
+            # Binance format (matching existing bot)
             candle = {
                 'timestamp': int(candle_data.get('t', 0)),
                 'open': float(candle_data.get('o', 0)),
@@ -294,6 +311,9 @@ class MarketDataStream:
                 'close': float(candle_data.get('c', 0)),
                 'volume': float(candle_data.get('v', 0))
             }
+        else:
+            logger.warning(f"[WARN] Unsupported exchange for OHLCV: {self.exchange}")
+            return
         
         # Add or update
         candles = self.ohlcv_data[symbol]

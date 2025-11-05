@@ -99,7 +99,7 @@ class AITradingBot:
         
         try:
             # 1. Data Manager
-            exchange = self.config.get('exchange', {}).get('name', 'bybit')
+            exchange = self.config.get('exchange', {}).get('name', 'binance')
             symbols = self.config.get('data', {}).get('symbols', [])
             websocket_url = self.config.get('exchange', {}).get('websocket_url', {}).get(exchange)
             

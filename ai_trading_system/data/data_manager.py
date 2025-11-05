@@ -48,48 +48,88 @@ class DataManager:
         # REST API base URL for fetching historical data
         if exchange.lower() == "bybit":
             self.api_base = "https://api-testnet.bybit.com" if "testnet" in str(websocket_url).lower() else "https://api.bybit.com"
+        elif exchange.lower() == "binance":
+            self.api_base = "https://testnet.binance.vision" if "testnet" in str(websocket_url).lower() else "https://api.binance.com"
         else:
             self.api_base = None
     
-    async def _fetch_historical_klines(self, symbol: str, limit: int = 200, interval: str = "5") -> List[Dict[str, Any]]:
+    async def _fetch_historical_klines(self, symbol: str, limit: int = 200, interval: str = "5m") -> List[Dict[str, Any]]:
         """Fetch historical kline data from REST API"""
         if not self.api_base:
             return []
         
         try:
-            url = f"{self.api_base}/v5/market/kline"
-            params = {
-                "category": "spot",
-                "symbol": symbol,
-                "interval": interval,  # 5 minute
-                "limit": limit
-            }
+            if self.exchange.lower() == "bybit":
+                # Bybit format
+                url = f"{self.api_base}/v5/market/kline"
+                params = {
+                    "category": "spot",
+                    "symbol": symbol,
+                    "interval": interval.replace("m", ""),  # "5m" -> "5"
+                    "limit": limit
+                }
+                
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                if data.get("retCode") != 0:
+                    logger.warning(f"[WARN] Bybit API error: {data.get('retMsg', 'Unknown error')}")
+                    return []
+                
+                klines = data.get("result", {}).get("list", [])
+                
+                # Convert to standard format [timestamp, open, high, low, close, volume]
+                formatted = []
+                for k in reversed(klines):  # Reverse to get chronological order
+                    formatted.append({
+                        'timestamp': int(k[0]),  # startTime
+                        'open': float(k[1]),
+                        'high': float(k[2]),
+                        'low': float(k[3]),
+                        'close': float(k[4]),
+                        'volume': float(k[5])
+                    })
+                
+            elif self.exchange.lower() == "binance":
+                # Binance format (matching existing bot)
+                url = f"{self.api_base}/api/v3/klines"
+                params = {
+                    "symbol": symbol,
+                    "interval": interval,  # "5m"
+                    "limit": limit
+                }
+                
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                klines = response.json()
+                
+                # Binance format: [Open time, Open, High, Low, Close, Volume, ...]
+                formatted = []
+                for k in klines:
+                    formatted.append({
+                        'timestamp': int(k[0]),  # Open time
+                        'open': float(k[1]),
+                        'high': float(k[2]),
+                        'low': float(k[3]),
+                        'close': float(k[4]),
+                        'volume': float(k[5])
+                    })
             
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            if data.get("retCode") != 0:
-                logger.warning(f"[WARN] Bybit API error: {data.get('retMsg', 'Unknown error')}")
+            else:
+                logger.warning(f"[WARN] Unsupported exchange: {self.exchange}")
                 return []
             
-            klines = data.get("result", {}).get("list", [])
-            
-            # Convert to standard format [timestamp, open, high, low, close, volume]
-            formatted = []
-            for k in reversed(klines):  # Reverse to get chronological order
-                formatted.append({
-                    'timestamp': int(k[0]),  # startTime
-                    'open': float(k[1]),
-                    'high': float(k[2]),
-                    'low': float(k[3]),
-                    'close': float(k[4]),
-                    'volume': float(k[5])
-                })
-            
-            logger.info(f"[DATA] Fetched {len(formatted)} historical candles for {symbol}")
+            logger.info(f"[DATA] Fetched {len(formatted)} historical candles for {symbol} from {self.exchange}")
             return formatted
             
+        except requests.exceptions.HTTPError as e:
+            # Handle 400 errors gracefully (symbol not available on testnet)
+            if e.response.status_code == 400:
+                logger.debug(f"[SKIP] {symbol} not available on testnet")
+                return []
+            logger.error(f"[ERROR] HTTP error fetching {symbol}: {e}")
+            return []
         except Exception as e:
             logger.error(f"[ERROR] Failed to fetch historical data for {symbol}: {e}")
             return []
@@ -100,8 +140,9 @@ class DataManager:
         
         # Fetch initial historical data to bootstrap
         logger.info("[DATA] Fetching initial historical data...")
+        interval = "5m"  # Standard interval format
         for symbol in self.symbols:
-            historical = await self._fetch_historical_klines(symbol, limit=200)
+            historical = await self._fetch_historical_klines(symbol, limit=200, interval=interval)
             if historical:
                 # Inject into market stream
                 if symbol not in self.market_stream.ohlcv_data:
