@@ -174,9 +174,8 @@ class AITradingBot:
         """Main trading loop"""
         logger.info("[LOOP] Starting trading loop...")
         
-        # Wait for initial data collection (5 minutes worth of data)
-        logger.info("[LOOP] Waiting for initial data collection (5 minutes)...")
-        await asyncio.sleep(60)  # Wait 1 minute for initial candles
+        # Wait a bit for WebSocket to stabilize
+        await asyncio.sleep(5)
         
         while self.running:
             try:

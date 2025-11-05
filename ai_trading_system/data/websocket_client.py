@@ -67,7 +67,16 @@ class WebSocketClient:
                 }
             
             await self.websocket.send(json.dumps(subscribe_msg))
-            logger.info(f"[WEBSOCKET] Subscribed to {len(channels)} channels")
+            logger.info(f"[WEBSOCKET] Subscribed to {len(channels)} channels: {channels[:3]}...")
+            
+            # Wait for subscription confirmation
+            try:
+                response = await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
+                response_data = json.loads(response)
+                logger.debug(f"[WEBSOCKET] Subscription response: {response_data}")
+            except asyncio.TimeoutError:
+                logger.warning("[WARN] No subscription confirmation received")
+            
             return True
         except Exception as e:
             logger.error(f"[ERROR] Subscription failed: {e}")
@@ -91,6 +100,11 @@ class WebSocketClient:
                 
                 self.last_message_time = time.time()
                 data = json.loads(message)
+                
+                # Skip subscription confirmations
+                if data.get("op") == "subscribe" or data.get("success") is not None:
+                    logger.debug(f"[WEBSOCKET] Subscription confirmation: {data}")
+                    continue
                 
                 # Process message
                 if self.callback:
