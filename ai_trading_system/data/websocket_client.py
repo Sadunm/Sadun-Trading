@@ -203,10 +203,16 @@ class MarketDataStream:
                 if 'kline' in topic:
                     # Kline data
                     data = message.get('data', [])
-                    for candle in data:
-                        symbol = candle.get('symbol')
+                    if isinstance(data, list):
+                        for candle in data:
+                            symbol = candle.get('symbol')
+                            if symbol:
+                                self._update_ohlcv(symbol, candle)
+                    elif isinstance(data, dict):
+                        # Single candle
+                        symbol = data.get('symbol')
                         if symbol:
-                            self._update_ohlcv(symbol, candle)
+                            self._update_ohlcv(symbol, data)
                 
                 elif 'orderbook' in topic:
                     # Orderbook data

@@ -163,6 +163,8 @@ class AITradingBot:
             
         except KeyboardInterrupt:
             logger.info("[STOP] Bot stopped by user")
+        except asyncio.CancelledError:
+            logger.info("[STOP] Bot cancelled")
         except Exception as e:
             logger.error(f"[ERROR] Bot error: {e}", exc_info=True)
         finally:
@@ -171,6 +173,10 @@ class AITradingBot:
     async def _trading_loop(self):
         """Main trading loop"""
         logger.info("[LOOP] Starting trading loop...")
+        
+        # Wait for initial data collection (5 minutes worth of data)
+        logger.info("[LOOP] Waiting for initial data collection (5 minutes)...")
+        await asyncio.sleep(60)  # Wait 1 minute for initial candles
         
         while self.running:
             try:
@@ -183,6 +189,9 @@ class AITradingBot:
                 # Wait before next iteration
                 await asyncio.sleep(30)  # 30 second intervals
                 
+            except asyncio.CancelledError:
+                logger.info("[LOOP] Trading loop cancelled")
+                break
             except Exception as e:
                 logger.error(f"[ERROR] Error in trading loop: {e}", exc_info=True)
                 await asyncio.sleep(5)
@@ -194,7 +203,7 @@ class AITradingBot:
             ohlcv_data = self.data_manager.get_ohlcv(symbol, limit=200)
             
             if len(ohlcv_data) < 50:
-                logger.warning(f"[WARN] Insufficient data for {symbol}")
+                logger.debug(f"[DEBUG] Insufficient data for {symbol}: {len(ohlcv_data)} candles (need 50)")
                 return
             
             # Build features
@@ -326,7 +335,7 @@ class AITradingBot:
 async def main():
     """Main entry point"""
     logger.info("=" * 60)
-    logger.info("🚀 Multi-Strategy AI Trading Bot")
+    logger.info("[START] Multi-Strategy AI Trading Bot")
     logger.info("=" * 60)
     
     bot = AITradingBot()
@@ -334,6 +343,8 @@ async def main():
     try:
         await bot.initialize()
         await bot.start()
+    except KeyboardInterrupt:
+        logger.info("[STOP] Interrupted by user")
     except Exception as e:
         logger.error(f"[ERROR] Fatal error: {e}", exc_info=True)
         sys.exit(1)
