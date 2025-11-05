@@ -220,7 +220,35 @@ class AITradingBot:
             # Generate signals from all strategies
             signals = []
             
+            # 1. AI Signal Generator (PRIMARY - uses DeepSeek to generate signals)
+            try:
+                from ..strategies.ai_signal_generator import AISignalGenerator
+                if not hasattr(self, 'ai_generator'):
+                    self.ai_generator = AISignalGenerator()
+                
+                ai_signal = self.ai_generator.generate_signal(
+                    symbol=symbol,
+                    features=features,
+                    current_price=current_price,
+                    ohlcv_data=ohlcv_data
+                )
+                
+                if ai_signal and ai_signal.get('action') != 'FLAT':
+                    ai_signal['symbol'] = symbol
+                    ai_signal['strategy'] = 'ai_generator'
+                    signals.append(ai_signal)
+                    logger.info(f"[AI] Generated signal for {symbol}: {ai_signal.get('action')} "
+                               f"(confidence: {ai_signal.get('confidence', 0):.2%})")
+                    
+            except Exception as e:
+                logger.error(f"[ERROR] Error in AI signal generation for {symbol}: {e}")
+            
+            # 2. Rule-based strategies (SECONDARY - fallback)
             for strategy_name, strategy in self.strategies.items():
+                # Skip meta_ai (it's for validation, not signal generation)
+                if strategy_name == 'meta_ai':
+                    continue
+                    
                 try:
                     signal = strategy.generate_signal(
                         symbol=symbol,
