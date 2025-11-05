@@ -215,12 +215,17 @@ class OrderExecutor:
                     }
             else:
                 # Paper trading - simulate execution
+                # Use entry_price if current_price not available
+                if not current_price or current_price <= 0:
+                    current_price = entry_price
+                    logger.info(f"[PAPER] Using entry_price as executed_price for {symbol}: {current_price}")
+                
                 return {
                     'success': True,
                     'executed_quantity': quantity,
                     'executed_price': current_price,
                     'target_price': entry_price,
-                    'slippage_pct': slippage_pct,
+                    'slippage_pct': slippage_pct if current_price != entry_price else 0.0,
                     'order_id': order_id,
                     'paper_trading': True
                 }
@@ -258,12 +263,17 @@ class OrderExecutor:
             return True  # Allow if check fails
     
     async def _get_current_price(self, symbol: str) -> Optional[float]:
-        """Get current market price"""
+        """Get current market price with fallback"""
         try:
             if self.api_client:
                 price = await self.api_client.get_current_price(symbol)
-                return price
-            return None
+                if price and price > 0:
+                    return price
+            
+            # Paper trading fallback: Use entry_price if available
+            # Or return a default price (this should not happen in production)
+            logger.warning(f"[WARN] Could not get current price for {symbol}, using entry_price fallback")
+            return None  # Will be handled by caller
         except Exception as e:
             logger.error(f"[ERROR] Error getting current price: {e}")
             return None

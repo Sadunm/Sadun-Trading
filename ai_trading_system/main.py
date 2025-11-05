@@ -7,31 +7,30 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 
-# Add parent directory to path
+# COMPLETE ISOLATION: Only use ai_trading_system package
+# No imports from parent trading_bot directory
 script_dir = Path(__file__).parent
-trading_bot_dir = script_dir.parent
-sys.path.insert(0, str(trading_bot_dir))
+sys.path.insert(0, str(script_dir))
 
-# Import from ai_trading_system package
-from ai_trading_system.data.data_manager import DataManager
-from ai_trading_system.features.indicators import IndicatorCalculator
-from ai_trading_system.strategies.momentum_strategy import MomentumStrategy
-from ai_trading_system.strategies.mean_reversion_strategy import MeanReversionStrategy
-from ai_trading_system.strategies.breakout_strategy import BreakoutStrategy
-from ai_trading_system.strategies.trend_following_strategy import TrendFollowingStrategy
-from ai_trading_system.strategies.meta_ai_strategy import MetaAIStrategy
-from ai_trading_system.allocator.position_allocator import PositionAllocator
-from ai_trading_system.risk.risk_manager import RiskManager
-from ai_trading_system.execution.order_executor import OrderExecutor
-from ai_trading_system.utils.openrouter_client import OpenRouterClient
+# Import from ai_trading_system package (relative imports)
+from data.data_manager import DataManager
+from features.indicators import IndicatorCalculator
+from strategies.momentum_strategy import MomentumStrategy
+from strategies.mean_reversion_strategy import MeanReversionStrategy
+from strategies.breakout_strategy import BreakoutStrategy
+from strategies.trend_following_strategy import TrendFollowingStrategy
+from strategies.meta_ai_strategy import MetaAIStrategy
+from allocator.position_allocator import PositionAllocator
+from risk.risk_manager import RiskManager
+from execution.order_executor import OrderExecutor
+from utils.openrouter_client import OpenRouterClient
 import yaml
 import logging
 import os
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-# Import logger from parent utils
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Use only ai_trading_system logger (no parent dependency)
 try:
     from utils.logger import setup_logger
 except ImportError:
@@ -108,7 +107,9 @@ class AITradingBot:
         # State
         self.running = False
         self.capital = self.config.get('trading', {}).get('initial_capital', 100.0)
-        self.positions = []
+        self.positions = []  # List of open positions
+        self.closed_positions = []  # Trade history
+        self.total_pnl = 0.0  # Total profit/loss
         
     async def initialize(self):
         """Initialize all components"""
@@ -199,7 +200,10 @@ class AITradingBot:
         
         while self.running:
             try:
-                # Process each symbol
+                # CRITICAL: Monitor open positions first (stop loss/take profit)
+                await self._monitor_positions()
+                
+                # Process each symbol for new signals
                 symbols = self.config.get('data', {}).get('symbols', [])
                 
                 for symbol in symbols:
@@ -214,6 +218,135 @@ class AITradingBot:
             except Exception as e:
                 logger.error(f"[ERROR] Error in trading loop: {e}", exc_info=True)
                 await asyncio.sleep(5)
+    
+    async def _monitor_positions(self):
+        """Monitor open positions for stop loss/take profit"""
+        if not self.positions:
+            return
+        
+        try:
+            positions_to_close = []
+            
+            for position in self.positions:
+                symbol = position.get('symbol')
+                action = position.get('action')
+                entry_price = position.get('executed_price') or position.get('entry_price', 0)
+                stop_loss = position.get('stop_loss', 0)
+                take_profit = position.get('take_profit', 0)
+                quantity = position.get('executed_quantity') or position.get('position_size', 0)
+                
+                if entry_price <= 0:
+                    continue
+                
+                # Get current price
+                current_price = self.data_manager.get_current_price(symbol)
+                if not current_price or current_price <= 0:
+                    continue
+                
+                # Calculate P&L
+                if action == 'LONG':
+                    pnl_pct = ((current_price - entry_price) / entry_price) * 100
+                    # Check stop loss
+                    if stop_loss > 0 and current_price <= stop_loss:
+                        positions_to_close.append({
+                            'position': position,
+                            'reason': 'STOP_LOSS',
+                            'exit_price': stop_loss,
+                            'pnl_pct': ((stop_loss - entry_price) / entry_price) * 100
+                        })
+                    # Check take profit
+                    elif take_profit > 0 and current_price >= take_profit:
+                        positions_to_close.append({
+                            'position': position,
+                            'reason': 'TAKE_PROFIT',
+                            'exit_price': take_profit,
+                            'pnl_pct': ((take_profit - entry_price) / entry_price) * 100
+                        })
+                elif action == 'SHORT':
+                    pnl_pct = ((entry_price - current_price) / entry_price) * 100
+                    # Check stop loss
+                    if stop_loss > 0 and current_price >= stop_loss:
+                        positions_to_close.append({
+                            'position': position,
+                            'reason': 'STOP_LOSS',
+                            'exit_price': stop_loss,
+                            'pnl_pct': ((entry_price - stop_loss) / entry_price) * 100
+                        })
+                    # Check take profit
+                    elif take_profit > 0 and current_price <= take_profit:
+                        positions_to_close.append({
+                            'position': position,
+                            'reason': 'TAKE_PROFIT',
+                            'exit_price': take_profit,
+                            'pnl_pct': ((entry_price - take_profit) / entry_price) * 100
+                        })
+            
+            # Close positions
+            for close_info in positions_to_close:
+                await self._close_position(close_info['position'], close_info['exit_price'], close_info['reason'], close_info['pnl_pct'])
+                
+        except Exception as e:
+            logger.error(f"[ERROR] Error monitoring positions: {e}", exc_info=True)
+    
+    async def _close_position(self, position: Dict[str, Any], exit_price: float, reason: str, pnl_pct: float):
+        """Close a position"""
+        try:
+            symbol = position.get('symbol')
+            action = position.get('action')
+            entry_price = position.get('executed_price') or position.get('entry_price', 0)
+            quantity = position.get('executed_quantity') or position.get('position_size', 0)
+            
+            # Calculate P&L
+            if action == 'LONG':
+                gross_pnl = (exit_price - entry_price) * quantity
+            else:  # SHORT
+                gross_pnl = (entry_price - exit_price) * quantity
+            
+            # Estimate fees (0.1% each side for Binance)
+            entry_fee = entry_price * quantity * 0.001
+            exit_fee = exit_price * quantity * 0.001
+            total_fees = entry_fee + exit_fee
+            
+            net_pnl = gross_pnl - total_fees
+            net_pnl_pct = (net_pnl / (entry_price * quantity)) * 100 if entry_price * quantity > 0 else 0
+            
+            # Update capital
+            self.capital += net_pnl
+            self.total_pnl += net_pnl
+            
+            # Record trade
+            trade_record = {
+                'symbol': symbol,
+                'strategy': position.get('strategy', 'unknown'),
+                'action': action,
+                'entry_price': entry_price,
+                'exit_price': exit_price,
+                'quantity': quantity,
+                'entry_time': position.get('entry_time', datetime.now().isoformat()),
+                'exit_time': datetime.now().isoformat(),
+                'gross_pnl': gross_pnl,
+                'fees': total_fees,
+                'net_pnl': net_pnl,
+                'pnl_pct': net_pnl_pct,
+                'reason': reason,
+                'status': 'CLOSED'
+            }
+            
+            # Remove from open positions
+            if position in self.positions:
+                self.positions.remove(position)
+            
+            # Add to closed positions
+            self.closed_positions.append(trade_record)
+            
+            # Record in risk manager
+            self.risk_manager.record_trade(trade_record)
+            
+            logger.info(f"[CLOSE] {symbol} {action} @ {exit_price:.2f} | "
+                       f"P&L: {net_pnl:.2f} ({net_pnl_pct:.2f}%) | Reason: {reason}")
+            
+        except Exception as e:
+            logger.error(f"[ERROR] Error closing position: {e}", exc_info=True)
     
     async def _process_symbol(self, symbol: str):
         """Process a single symbol"""
@@ -253,12 +386,42 @@ class AITradingBot:
                         self.ai_generator = None
                 
                 if self.ai_generator:
-                    ai_signal = self.ai_generator.generate_signal(
-                        symbol=symbol,
-                        features=features,
-                        current_price=current_price,
-                        ohlcv_data=ohlcv_data
-                    )
+                    # Add timeout to AI signal generation (30s timeout)
+                    try:
+                        # Use asyncio.to_thread for sync function (Python 3.9+)
+                        # For older Python, use loop.run_in_executor
+                        try:
+                            ai_signal = await asyncio.wait_for(
+                                asyncio.to_thread(
+                                    self.ai_generator.generate_signal,
+                                    symbol=symbol,
+                                    features=features,
+                                    current_price=current_price,
+                                    ohlcv_data=ohlcv_data
+                                ),
+                                timeout=30.0  # 30 second timeout
+                            )
+                        except AttributeError:
+                            # Python < 3.9 fallback
+                            loop = asyncio.get_event_loop()
+                            ai_signal = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    None,
+                                    lambda: self.ai_generator.generate_signal(
+                                        symbol=symbol,
+                                        features=features,
+                                        current_price=current_price,
+                                        ohlcv_data=ohlcv_data
+                                    )
+                                ),
+                                timeout=30.0
+                            )
+                    except asyncio.TimeoutError:
+                        logger.warning(f"[WARN] AI signal generation timeout for {symbol} (30s), using fallback")
+                        ai_signal = None
+                    except Exception as e:
+                        logger.error(f"[ERROR] AI signal generation error for {symbol}: {e}")
+                        ai_signal = None
                     
                     if ai_signal and ai_signal.get('action') != 'FLAT':
                         ai_signal['symbol'] = symbol
@@ -360,16 +523,17 @@ class AITradingBot:
             )
             
             if result.get('success'):
-                # Add position
+                # Add position with entry time
                 self.positions.append({
                     **position,
                     'order_id': order_id,
                     'executed_price': result.get('executed_price'),
                     'executed_quantity': result.get('executed_quantity'),
+                    'entry_time': datetime.now().isoformat(),
                     'status': 'OPEN'
                 })
                 
-                logger.info(f"[EXEC] Opened {action} position: {symbol} {quantity} @ {result.get('executed_price')}")
+                logger.info(f"[EXEC] Opened {action} position: {symbol} {quantity:.8f} @ ${result.get('executed_price'):.2f}")
             else:
                 logger.warning(f"[WARN] Order failed: {result.get('error')}")
                 
