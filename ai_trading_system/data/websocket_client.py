@@ -203,8 +203,9 @@ class MarketDataStream:
                 streams.append(f"{symbol_lower}@depth20@100ms")
             
             # Build URL with streams parameter
+            # Binance format: wss://testnet.binance.vision/ws?streams=stream1,stream2,stream3
             if streams:
-                streams_param = "/".join(streams)
+                streams_param = ",".join(streams)  # Comma-separated, not slash
                 # Update URL to include streams
                 if "?" not in self.url:
                     self.url = f"{self.url}?streams={streams_param}"
