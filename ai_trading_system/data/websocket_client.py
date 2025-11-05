@@ -36,11 +36,29 @@ class WebSocketClient:
     async def connect(self):
         """Connect to WebSocket"""
         try:
-            self.websocket = await websockets.connect(self.url)
+            # Binance WebSocket requires specific headers
+            extra_headers = {}
+            if "binance" in self.url.lower():
+                # Binance testnet might need specific headers
+                extra_headers = {
+                    "Origin": "https://testnet.binance.vision"
+                }
+            
+            self.websocket = await websockets.connect(
+                self.url,
+                extra_headers=extra_headers if extra_headers else None
+            )
             self.reconnect_attempts = 0
             self.last_message_time = time.time()
             logger.info(f"[WEBSOCKET] Connected to {self.url}")
             return True
+        except websockets.exceptions.InvalidStatusCode as e:
+            # HTTP 200 means connection accepted but protocol issue
+            if e.status_code == 200:
+                logger.warning(f"[WARN] WebSocket handshake issue (HTTP 200) - server might be down or format incorrect")
+            else:
+                logger.error(f"[ERROR] WebSocket connection rejected: HTTP {e.status_code}")
+            return False
         except Exception as e:
             logger.error(f"[ERROR] WebSocket connection failed: {e}")
             return False

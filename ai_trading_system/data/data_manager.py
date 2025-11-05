@@ -124,11 +124,24 @@ class DataManager:
             return formatted
             
         except requests.exceptions.HTTPError as e:
-            # Handle 400 errors gracefully (symbol not available on testnet)
-            if e.response.status_code == 400:
+            # Handle different HTTP errors gracefully
+            status_code = e.response.status_code if e.response else 0
+            if status_code == 400:
                 logger.debug(f"[SKIP] {symbol} not available on testnet")
                 return []
+            elif status_code in [502, 503, 504]:
+                # Server errors - testnet might be down
+                logger.warning(f"[WARN] Binance testnet server error ({status_code}) for {symbol} - will continue without historical data")
+                return []
+            elif status_code == 429:
+                # Rate limit
+                logger.warning(f"[WARN] Rate limit for {symbol} - will continue without historical data")
+                return []
             logger.error(f"[ERROR] HTTP error fetching {symbol}: {e}")
+            return []
+        except requests.exceptions.RequestException as e:
+            # Network errors
+            logger.warning(f"[WARN] Network error fetching {symbol}: {e} - will continue without historical data")
             return []
         except Exception as e:
             logger.error(f"[ERROR] Failed to fetch historical data for {symbol}: {e}")
@@ -141,6 +154,9 @@ class DataManager:
         # Fetch initial historical data to bootstrap
         logger.info("[DATA] Fetching initial historical data...")
         interval = "5m"  # Standard interval format
+        successful = 0
+        failed = 0
+        
         for symbol in self.symbols:
             historical = await self._fetch_historical_klines(symbol, limit=200, interval=interval)
             if historical:
@@ -149,6 +165,16 @@ class DataManager:
                     self.market_stream.ohlcv_data[symbol] = []
                 self.market_stream.ohlcv_data[symbol] = historical
                 logger.info(f"[DATA] Bootstrapped {len(historical)} candles for {symbol}")
+                successful += 1
+            else:
+                failed += 1
+                # Small delay to avoid rate limits
+                await asyncio.sleep(0.5)
+        
+        if successful > 0:
+            logger.info(f"[DATA] Successfully fetched historical data for {successful}/{len(self.symbols)} symbols")
+        if failed > 0:
+            logger.warning(f"[WARN] Failed to fetch historical data for {failed} symbols - will rely on WebSocket only")
         
         logger.info("[DATA] Data manager started")
     

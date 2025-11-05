@@ -201,8 +201,9 @@ class AITradingBot:
             # Get market data
             ohlcv_data = self.data_manager.get_ohlcv(symbol, limit=200)
             
-            if len(ohlcv_data) < 50:
-                logger.debug(f"[DEBUG] Insufficient data for {symbol}: {len(ohlcv_data)} candles (need 50)")
+            # Reduced requirement - allow trading with less data if WebSocket is working
+            if len(ohlcv_data) < 20:
+                logger.debug(f"[DEBUG] Insufficient data for {symbol}: {len(ohlcv_data)} candles (need 20)")
                 return
             
             # Build features
