@@ -200,17 +200,25 @@ class AITradingBot:
         
         while self.running:
             try:
-                # CRITICAL: Monitor open positions first (stop loss/take profit)
+                # CRITICAL: Monitor open positions more frequently (every 5 seconds)
+                # This ensures stop loss/take profit are checked in near real-time
                 await self._monitor_positions()
                 
-                # Process each symbol for new signals
-                symbols = self.config.get('data', {}).get('symbols', [])
+                # Process each symbol for new signals (every 30 seconds)
+                # Use a counter to only process signals every 6 iterations (30s / 5s = 6)
+                if not hasattr(self, '_signal_counter'):
+                    self._signal_counter = 0
                 
-                for symbol in symbols:
-                    await self._process_symbol(symbol)
+                self._signal_counter += 1
+                if self._signal_counter >= 6:  # Every 30 seconds (6 * 5s = 30s)
+                    self._signal_counter = 0
+                    symbols = self.config.get('data', {}).get('symbols', [])
+                    
+                    for symbol in symbols:
+                        await self._process_symbol(symbol)
                 
-                # Wait before next iteration
-                await asyncio.sleep(30)  # 30 second intervals
+                # Wait 5 seconds before next position check (real-time monitoring)
+                await asyncio.sleep(5)
                 
             except asyncio.CancelledError:
                 logger.info("[LOOP] Trading loop cancelled")
