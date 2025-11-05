@@ -38,17 +38,30 @@ class MeanReversionStrategy(BaseStrategy):
             bb_position = features.get('bb_position', [])
             rsi = features.get('rsi', [])
             
-            if not all([zscore, bb_upper, bb_lower, bb_middle]):
+            # Safe check and conversion
+            def safe_get_last(arr, default=0.0):
+                if arr is None:
+                    return default
+                if isinstance(arr, (list, np.ndarray)):
+                    if len(arr) == 0:
+                        return default
+                    val = arr[-1]
+                    if isinstance(val, np.generic):
+                        return float(val)
+                    return float(val)
+                return float(arr)
+            
+            if not zscore or not bb_upper or not bb_lower or not bb_middle:
                 logger.warning(f"[WARN] Insufficient indicators for mean reversion")
                 return None
             
             # Convert to float to avoid numpy array comparison ambiguity
-            zscore_val = float(zscore[-1]) if isinstance(zscore, (list, np.ndarray)) else float(zscore)
-            bb_upper_val = float(bb_upper[-1]) if isinstance(bb_upper, (list, np.ndarray)) else float(bb_upper)
-            bb_lower_val = float(bb_lower[-1]) if isinstance(bb_lower, (list, np.ndarray)) else float(bb_lower)
-            bb_middle_val = float(bb_middle[-1]) if isinstance(bb_middle, (list, np.ndarray)) else float(bb_middle)
-            bb_pos = float(bb_position[-1]) if bb_position and isinstance(bb_position, (list, np.ndarray)) else (float(bb_position) if bb_position else 0.5)
-            rsi_val = float(rsi[-1]) if rsi and isinstance(rsi, (list, np.ndarray)) else (float(rsi) if rsi else 50.0)
+            zscore_val = safe_get_last(zscore, 0.0)
+            bb_upper_val = safe_get_last(bb_upper, 0.0)
+            bb_lower_val = safe_get_last(bb_lower, 0.0)
+            bb_middle_val = safe_get_last(bb_middle, 0.0)
+            bb_pos = safe_get_last(bb_position, 0.5)
+            rsi_val = safe_get_last(rsi, 50.0)
             
             # Entry conditions
             action = 'FLAT'

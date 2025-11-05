@@ -43,15 +43,48 @@ class BreakoutStrategy(BaseStrategy):
                 logger.warning(f"[WARN] Insufficient data for breakout strategy")
                 return None
             
+            # Safe conversion helper
+            def safe_get_last(arr, default=0.0):
+                if arr is None:
+                    return default
+                if isinstance(arr, (list, np.ndarray)):
+                    if len(arr) == 0:
+                        return default
+                    val = arr[-1]
+                    if isinstance(val, np.generic):
+                        return float(val)
+                    return float(val)
+                return float(arr)
+            
+            def safe_get_max(arr, default=0.0):
+                if arr is None or len(arr) == 0:
+                    return default
+                if isinstance(arr, (list, np.ndarray)):
+                    val = max(arr)
+                    if isinstance(val, np.generic):
+                        return float(val)
+                    return float(val)
+                return float(arr)
+            
+            def safe_get_min(arr, default=0.0):
+                if arr is None or len(arr) == 0:
+                    return default
+                if isinstance(arr, (list, np.ndarray)):
+                    val = min(arr)
+                    if isinstance(val, np.generic):
+                        return float(val)
+                    return float(val)
+                return float(arr)
+            
             # Calculate recent high/low (convert to float)
             lookback = min(20, len(highs))
-            recent_high = float(max(highs[-lookback:])) if isinstance(highs, (list, np.ndarray)) else float(highs)
-            recent_low = float(min(lows[-lookback:])) if isinstance(lows, (list, np.ndarray)) else float(lows)
+            recent_high = safe_get_max(highs[-lookback:] if len(highs) >= lookback else highs, 0.0)
+            recent_low = safe_get_min(lows[-lookback:] if len(lows) >= lookback else lows, 0.0)
             
-            current_atr = float(atr[-1]) if atr and isinstance(atr, (list, np.ndarray)) else (float(atr) if atr else 0.0)
-            current_atr_pct = float(atr_pct[-1]) if atr_pct and isinstance(atr_pct, (list, np.ndarray)) else (float(atr_pct) if atr_pct else 0.5)
-            current_vol = float(volume_ratio[-1]) if volume_ratio and isinstance(volume_ratio, (list, np.ndarray)) else (float(volume_ratio) if volume_ratio else 1.0)
-            current_volatility = float(volatility[-1]) if volatility and isinstance(volatility, (list, np.ndarray)) else (float(volatility) if volatility else 0.0)
+            current_atr = safe_get_last(atr, 0.0)
+            current_atr_pct = safe_get_last(atr_pct, 0.5)
+            current_vol = safe_get_last(volume_ratio, 1.0)
+            current_volatility = safe_get_last(volatility, 0.0)
             
             # Volatility expansion check
             if len(volatility) >= 10:

@@ -21,7 +21,7 @@ exchange:
   api_secret: "${BINANCE_API_SECRET}"
   websocket_url:
     bybit: "wss://stream-testnet.bybit.com/v5/public/spot"
-    binance: "wss://testnet.binance.vision/stream"
+    binance: "wss://testnet.binance.vision/ws"
 
 # Trading Configuration
 trading:

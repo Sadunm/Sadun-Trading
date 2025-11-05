@@ -166,14 +166,29 @@ class MomentumStrategy(BaseStrategy):
             momentum = features.get('momentum', [])
             volume_ratio = features.get('volume_ratio', [])
             
-            if not all([rsi, macd_hist, momentum, volume_ratio]):
+            # Safe check for empty arrays/lists
+            def safe_get_last(arr, default=0.0):
+                if arr is None:
+                    return default
+                if isinstance(arr, (list, np.ndarray)):
+                    if len(arr) == 0:
+                        return default
+                    val = arr[-1]
+                    # Convert numpy scalar to Python float
+                    if isinstance(val, np.generic):
+                        return float(val)
+                    return float(val)
+                return float(arr)
+            
+            # Check if we have valid data
+            if not rsi or not macd_hist or not momentum or not volume_ratio:
                 return 'FLAT', 0.0
             
             # Convert to float to avoid numpy array comparison ambiguity
-            rsi_val = float(rsi[-1]) if isinstance(rsi, (list, np.ndarray)) else float(rsi)
-            macd_val = float(macd_hist[-1]) if isinstance(macd_hist, (list, np.ndarray)) else float(macd_hist)
-            mom_val = float(momentum[-1]) if isinstance(momentum, (list, np.ndarray)) else float(momentum)
-            vol_val = float(volume_ratio[-1]) if isinstance(volume_ratio, (list, np.ndarray)) else float(volume_ratio)
+            rsi_val = safe_get_last(rsi, 50.0)
+            macd_val = safe_get_last(macd_hist, 0.0)
+            mom_val = safe_get_last(momentum, 0.0)
+            vol_val = safe_get_last(volume_ratio, 1.0)
             
             # Long signal
             if (rsi_val < 50 and macd_val > 0 and mom_val > 0 and vol_val > 1.2):

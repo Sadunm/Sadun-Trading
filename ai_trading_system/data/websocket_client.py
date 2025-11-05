@@ -173,7 +173,8 @@ class MarketDataStream:
             self.url = "wss://stream-testnet.bybit.com/v5/public/spot"
         elif self.exchange == "binance":
             # Binance testnet WebSocket URL (correct format)
-            self.url = "wss://testnet.binance.vision/stream" if not url else url
+            # Note: Binance testnet uses /ws endpoint, not /stream
+            self.url = url if url else "wss://testnet.binance.vision/ws"
         else:
             raise ValueError(f"Unsupported exchange: {exchange}")
         
@@ -194,10 +195,22 @@ class MarketDataStream:
                 channels.append(f"orderbook.20.{symbol}")
         elif self.exchange == "binance":
             # Binance channels (matching existing bot format)
+            # Binance requires streams in URL format: /ws?streams=stream1,stream2,stream3
+            streams = []
             for symbol in self.symbols:
                 symbol_lower = symbol.lower()
-                channels.append(f"{symbol_lower}@kline_5m")
-                channels.append(f"{symbol_lower}@depth20@100ms")
+                streams.append(f"{symbol_lower}@kline_5m")
+                streams.append(f"{symbol_lower}@depth20@100ms")
+            
+            # Build URL with streams parameter
+            if streams:
+                streams_param = "/".join(streams)
+                # Update URL to include streams
+                if "?" not in self.url:
+                    self.url = f"{self.url}?streams={streams_param}"
+            
+            # Return empty list for subscription (already in URL)
+            channels = []
         else:
             logger.warning(f"[WARN] Unsupported exchange: {self.exchange}")
             channels = []
@@ -210,7 +223,10 @@ class MarketDataStream:
         )
         
         await self.websocket_client.connect()
-        await self.websocket_client.subscribe(channels)
+        
+        # Only subscribe if channels are provided (Binance uses URL-based subscriptions)
+        if channels:
+            await self.websocket_client.subscribe(channels)
         
         # Start listening in background
         asyncio.create_task(self.websocket_client.listen())
